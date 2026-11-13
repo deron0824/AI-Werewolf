@@ -45,7 +45,18 @@ function situationSummary(view: GameStateView): string {
   text += `已出局：${dead.join('、') || '无'}\n`;
   if (history.length > 0) {
     text += `本局全部发言记录（按时间先后）：\n${history}\n`;
+  } else {
+    // 迭代7：明确"尚无发言"，防止模型误以为存在更早的上下文（甚至脑补上一局）
+    text += `本局发言记录：尚无（本局还没有任何人发言过，你听不到任何之前的发言）。\n`;
   }
+  // 迭代7 反幻觉护栏：列出尚未发言的存活玩家 + 禁止虚构他人发言。
+  // 实测问题：第一轮里先发言的 AI 会幻觉出"X号之前发言过激"（实际 X 还没说过话）。
+  const spokenSeats = new Set(view.speeches.map((s) => s.seat));
+  const notSpoken = view.players.filter((p) => p.alive && !spokenSeats.has(p.seat)).map((p) => `${p.seat}号`);
+  if (notSpoken.length > 0) {
+    text += `本局尚未发言过的玩家：${notSpoken.join('、')}（他们还没有说过任何话）。\n`;
+  }
+  text += `引用规则：评论或转述他人发言时，只能引用上面"发言记录"中真实出现的内容；严禁编造、脑补或转述记录里不存在的发言（例如说某人"刚才说过什么"而记录里并没有）。\n`;
   return text;
 }
 
