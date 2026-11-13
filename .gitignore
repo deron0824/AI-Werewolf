@@ -1,0 +1,21 @@
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+
+# WorkBuddy 云激活产物（含 publishableKey，禁止入库）
+cloudConfig.json
+server/src/llm/cloudConfig.json
+
+# 运行时数据（路线 B settings.json 含 API Key，禁止入库）
+server/data/
+*.log
+
+# 环境与编辑器（.env.example 是模板，必须入库）
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,27 @@
+{
+  "name": "@werewolf/server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "狼人杀 Demo 服务端：Express + Socket.IO + 裁判状态机 + LLM 三级降级",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tencent-ai/workbuddy-cloud-sdk": "dev",
+    "express": "^4.19.0",
+    "socket.io": "^4.7.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.0",
+    "tsx": "^4.10.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  }
+}

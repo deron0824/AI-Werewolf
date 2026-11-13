@@ -1,0 +1,5 @@
+{
+  "_comment": "复制为 cloudConfig.json 并填入你自己的 WorkBuddy 云服务凭据（路线 A）。cloudConfig.json 已被 .gitignore 排除，切勿提交真实凭据。没有 WorkBuddy 云服务也没关系：路线 B（OpenAI 兼容 API Key）与路线 C（模板兜底）开箱即用。",
+  "endpoint": "https://your-workbuddy-cloud-endpoint.example.com",
+  "publishableKey": "pk_your_publishable_key_here"
+}

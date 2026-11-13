@@ -1,0 +1,63 @@
+sequenceDiagram
+    autonumber
+    participant H1 as 真人甲(浏览器)
+    participant H2 as 真人乙(浏览器)
+    participant S as Socket.IO/Express(server)
+    participant RM as RoomManager
+    participant JE as JudgeEngine
+    participant AI as AIEngine
+    participant LP as LLMPipeline
+
+    H1->>S: REST POST /api/rooms {nickname}
+    S->>RM: createRoom()
+    RM-->>S: roomId + 4位房间码 + seat
+    S-->>H1: 房间码 + playerId + rejoinToken
+    H2->>S: REST POST /api/rooms/join {roomCode, nickname}
+    RM-->>S: 第2真人席位分配
+    S->>S: AIEngine 自动填充 4 个 AI（名字/头像/性格）
+    H1->>S: socket: game:start
+    S->>JE: runLoop() 启动裁判状态机
+    JE->>S: broadcast state:sync（各自裁剪视图）+ 私发 roleCard
+    Note over S,H2: 狼牌持有者私收 wolf:teammates（拍板③）
+
+    rect rgb(230,235,250)
+    Note over JE,LP: 夜晚（第1夜）
+    JE->>S: judge:say「天黑请闭眼」+ phase:NIGHT_WOLF
+    par 双狼行动
+        JE->>AI: decideNight(狼A, 含队友信息的视图)
+        AI->>LP: chat(结构化 JSON 决策, 超时10s)
+        LP-->>AI: 目标=3号
+        AI-->>JE: submitAction(wolf_kill, 3)
+    and
+        JE->>AI: decideNight(狼B)
+        AI-->>JE: submitAction(wolf_kill, 3)（不一致则 Rules 仲裁）
+    end
+    JE->>S: phase:NIGHT_SEER
+    JE->>AI: decideNight(预言家) → submitAction(seer_check, 2)
+    JE-->>AI: 私发查验结果（好人/狼人）
+    JE->>S: phase:NIGHT_WITCH
+    JE->>AI: decideNight(女巫, 含刀口) → 用解药救/毒/跳过
+    JE->>JE: Rules.resolveNight() → 死亡结算 + checkWin()
+    end
+
+    JE->>S: judge:say「天亮了，昨夜 X 号死亡」+ phase:DAY_SPEECH
+    Note over JE: 死者若为真人→等待遗言；AI→generateSpeech()
+    loop 按座位顺序发言（Rules.speechOrder）
+        JE->>AI: generateSpeech(当前发言者, 30-80字口语)
+        AI-->>JE: 发言文本
+        JE->>S: typing:start(1~3s) → speech:new → typing:stop
+    end
+    JE->>S: phase:DAY_VOTE（真人收 vote:submit，AI 收 decideVote）
+    JE->>JE: Rules.tallyVotes() → 最高票放逐 / 平票→DAY_PK
+    alt 平票 PK
+        JE->>S: phase:DAY_PK（仅平票者发言，其余人再投）
+        JE->>JE: 再平票→平安日，无人出局
+    end
+    JE->>S: judge:say 票数+出局播报 → 被放逐者遗言
+    JE->>JE: checkWin()：好人数≤狼数→狼胜 / 狼全灭→好人胜
+    alt 未分胜负
+        JE->>JE: dayNumber+1，回到夜晚循环
+    else 分出胜负
+        JE->>S: game:over {winner, reason}
+        JE->>S: broadcast record（可 GET /api/rooms/:id/record 下载 JSON）
+    end

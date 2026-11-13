@@ -1,0 +1,32 @@
+{
+  "name": "ai-werewolf",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI Werewolf：2 真人 + 4 LLM 驱动 AI，法官引擎主持 6 人局昼夜循环，LLM 三级降级（WorkBuddy 免密钥 → OpenAI 兼容 → 模板句库）",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev --workspace @werewolf/server",
+    "dev:client": "npm run dev --workspace @werewolf/client",
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
+    "typecheck:shared": "npm run typecheck --workspace @werewolf/shared",
+    "typecheck:server": "npm run typecheck --workspace @werewolf/server",
+    "typecheck:client": "npm run typecheck --workspace @werewolf/client",
+    "typecheck": "npm run typecheck:shared && npm run typecheck:server && npm run typecheck:client",
+    "test:server": "npm run test --workspace @werewolf/server",
+    "e2e": "tsx server/scripts/e2e-sim.ts",
+    "check-llm": "tsx server/scripts/check-llm.ts",
+    "build:client": "npm run build --workspace @werewolf/client"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "tsx": "^4.10.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

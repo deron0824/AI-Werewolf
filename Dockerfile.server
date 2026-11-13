@@ -1,0 +1,20 @@
+# server 镜像：node:20-alpine，tsx 直跑 TS（免编译）
+FROM node:20-alpine AS base
+WORKDIR /app
+
+# 利用层缓存：先拷贝依赖清单
+COPY package.json ./
+COPY shared/package.json ./shared/
+COPY server/package.json ./server/
+COPY client/package.json ./client/
+RUN npm install --workspaces --include-workspace-root
+
+# 拷贝源码
+COPY tsconfig.base.json ./
+COPY shared/ ./shared/
+COPY server/ ./server/
+
+# cloudConfig.json 由运行时挂载（激活产物，不入镜像）
+WORKDIR /app/server
+EXPOSE 3000
+CMD ["npx", "tsx", "src/index.ts"]

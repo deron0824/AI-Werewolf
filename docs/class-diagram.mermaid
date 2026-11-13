@@ -1,0 +1,201 @@
+classDiagram
+    %% ============ 共享类型（shared/src/types.ts） ============
+    class Role {
+        <<enumeration>>
+        WEREWOLF
+        SEER
+        WITCH
+        VILLAGER
+    }
+    class Phase {
+        <<enumeration>>
+        LOBBY
+        NIGHT_WOLF
+        NIGHT_SEER
+        NIGHT_WITCH
+        DAWN
+        DAY_SPEECH
+        DAY_VOTE
+        DAY_PK
+        DAY_EXILE
+        GAME_OVER
+    }
+    class Player {
+        +string id
+        +number seat
+        +string name
+        +string avatarId
+        +boolean isHuman
+        +Persona persona
+        +Role role
+        +boolean alive
+        +boolean roleRevealed
+        +toPublicView() PlayerPublicView
+        +toPrivateView() PlayerPrivateView
+    }
+    class Persona {
+        +string label
+        +string trait
+        值: 激进~稳健~演技派~跟风
+    }
+    class GameState {
+        +string roomId
+        +number dayNumber
+        +boolean isNight
+        +Phase phase
+        +Player[] players
+        +SpeechEntry[] speeches
+        +VoteRecord[] votes
+        +NightRecord[] nights
+        +Winner winner
+    }
+    class GameStateView {
+        +number dayNumber
+        +Phase phase
+        +PlayerPublicView[] players
+        +PlayerPrivateView self
+        +SpeechEntry[] speeches
+        +VoteSummary voteSummary
+        +string[] wolfTeammates
+        +CheckRecord[] checkRecords
+        +PotionState potions
+        说明: 按请求者角色裁剪后的视图
+    }
+    class GameConfig {
+        +number seatCount
+        +RoleDistribution roles
+        +NightActionOrder nightOrder
+        +RuleFlags rules
+        6人局=默认值 9人局=示例数据
+    }
+    Player *-- Persona
+    GameState o-- Player
+    GameState o-- SpeechEntry
+    GameState o-- NightRecord
+    GameStateView ..> PlayerPublicView
+    GameStateView ..> PlayerPrivateView
+
+    %% ============ 服务端 ============
+    class RoomManager {
+        -Map~string~ rooms
+        +createRoom(hostName) CreateRoomResult
+        +joinByCode(roomCode, name) JoinResult
+        +rejoin(token) JoinResult
+        +closeRoom(roomId) void
+    }
+    class Room {
+        -string roomCode
+        -GameState state
+        -JudgeEngine engine
+        -GameRecord record
+        +bindSocket(playerId, socket) void
+        +broadcast(event, payload) void
+        +emitPrivate(playerId, event, payload) void
+        +buildView(playerId) GameStateView
+        +startGame() void
+    }
+    class JudgeEngine {
+        -GameState state
+        -GameConfig config
+        -AIEngine aiEngine
+        -PhaseGate gate
+        +runLoop() Promise~void~
+        +enterPhase(phase) Promise~void~
+        +submitAction(playerId, Action) void
+        +resolveNight(NightRecord) DeathReport
+        +resolveVote(VoteRecord) ExileResult
+        +checkWin() Winner
+    }
+    class PhaseGate {
+        -Set~number~ pendingSeats
+        -Map~number~ Action results
+        +awaitActions(seats, timeoutMs) Promise~Map~
+        +resolve(seat, Action) void
+        +onTimeout(cb) void
+    }
+    class Rules {
+        <<utility>>
+        +witchConstraints(record) boolean
+        +arbitrateWolfKill(targets) number
+        +speechOrder(state) number[]
+        +tallyVotes(votes) Tally
+        +pkFlow(tally) ExileResult
+        +checkWin(state) Winner
+    }
+    class GameRecord {
+        +RecordEntry[] entries
+        +log(entry) void
+        +export() GameRecordJSON
+    }
+    class AIEngine {
+        -LLMPipeline llm
+        -GameConfig config
+        +decideNight(player, GameStateView) Promise~Action~
+        +decideVote(player, GameStateView) Promise~Action~
+        +generateSpeech(player, GameStateView) Promise~string~
+        +generateLastWords(player, GameStateView) Promise~string~
+    }
+    class PromptBuilder {
+        <<utility>>
+        +buildDecisionPrompt(player, view) LLMMessage[]
+        +buildSpeechPrompt(player, view) LLMMessage[]
+        反作弊边界：只注入该角色应知信息
+    }
+    class DecisionParser {
+        <<utility>>
+        +parseAction(raw) Action?
+        +sanitize(target, validSeats) number?
+    }
+    RoomManager o-- Room
+    Room *-- JudgeEngine
+    Room *-- GameRecord
+    Room ..> GameStateView : 产出
+    JudgeEngine *-- PhaseGate
+    JudgeEngine ..> Rules : 调用纯函数
+    JudgeEngine ..> AIEngine : 真人缺席的每个行动都调 AI
+    AIEngine *-- PromptBuilder
+    AIEngine *-- DecisionParser
+    AIEngine ..> LLMProvider : 仅依赖接口
+
+    %% ============ LLM 三级降级链 ============
+    class LLMProvider {
+        <<interface>>
+        +string name
+        +checkHealth() Promise~boolean~
+        +chat(req LLMRequest) Promise~LLMResponse~
+    }
+    class LLMPipeline {
+        -LLMProvider[] chain
+        -string activeRoute
+        +chat(req) Promise~LLMResponse~
+        +getStatus() LLMStatus
+    }
+    class WorkBuddyCloudProvider {
+        -WorkBuddyCloud cloud
+        -string modelId
+        仅 stream:true 流式收集
+    }
+    class OpenAICompatProvider {
+        -string baseUrl
+        -string apiKey
+        -string model
+    }
+    class TemplateProvider {
+        -TemplateLibrary library
+        永不失败
+    }
+    class TemplateLibrary {
+        +speech(role, scenario, persona) string
+        +decideNight(role, view) Action
+        +lastWords(role) string
+    }
+    LLMProvider <|.. WorkBuddyCloudProvider
+    LLMProvider <|.. OpenAICompatProvider
+    LLMProvider <|.. TemplateProvider
+    LLMPipeline o-- LLMProvider : 有序链 A→B→C
+    TemplateProvider ..> TemplateLibrary
+
+    %% ============ 关系总注 ============
+    GameState ..> Role
+    GameState ..> Phase
+    GameConfig ..> Role
