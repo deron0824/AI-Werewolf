@@ -37,10 +37,16 @@ export default function StatusBar(): JSX.Element {
   const { view, llmStatus } = useGameContext();
   if (!view) return <div className="p-3 text-sm text-white/60">正在同步游戏状态…</div>;
 
-  const route = llmStatus?.activeRoute ?? 'C';
-  const routeText =
-    route === 'A' ? 'WorkBuddy LLM' : route === 'B' ? 'OpenAI 兼容 LLM' : '模板句库（本地兜底）';
-  const dotColor = route === 'C' ? 'bg-amber-400' : 'bg-emerald-400';
+  // llmStatus 为 null 表示尚未收到服务端 llm:status（服务端在每次 socket 连接时推送）：
+  // 此时显示“检测中”，而不是默认当作 C 路误报
+  const routeText = !llmStatus
+    ? 'LLM 状态检测中…'
+    : llmStatus.activeRoute === 'A'
+      ? 'WorkBuddy LLM'
+      : llmStatus.activeRoute === 'B'
+        ? 'OpenAI 兼容 LLM'
+        : '模板句库（本地兜底）';
+  const dotColor = !llmStatus ? 'bg-white/30' : llmStatus.activeRoute === 'C' ? 'bg-amber-400' : 'bg-emerald-400';
 
   return (
     <div className="flex items-center justify-between px-4 py-2 bg-night-800/80 border-b border-white/10 text-sm">
@@ -55,7 +61,7 @@ export default function StatusBar(): JSX.Element {
       <div className="flex items-center gap-2 text-xs text-white/70" title={llmStatus?.message ?? ''}>
         <span className={`inline-block h-2 w-2 rounded-full ${dotColor}`} />
         <span>{routeText}</span>
-        <span className="text-white/40">●已连接</span>
+        {llmStatus && <span className="text-white/40">●已连接</span>}
       </div>
     </div>
   );

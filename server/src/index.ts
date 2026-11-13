@@ -144,6 +144,9 @@ async function main(): Promise<void> {
 
   // ===== Socket.IO =====
   io.on('connection', (socket: RoomSocket) => {
+    // 新连接立即同步当前 LLM 降级链状态：llm:status 平时只在状态变化时广播，
+    // 后连入/刷新页面的客户端若不主动推一次，会一直停在“未收到状态”的兜底显示上
+    socket.emit('llm:status', pipeline.getStatus());
     socket.on('room:join-socket', (payload, ack) => {
       const result = roomManager.bindSocket(socket as never, payload.playerId, payload.rejoinToken);
       if (!result.ok) {
