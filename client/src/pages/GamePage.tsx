@@ -72,11 +72,11 @@ export default function GamePage(): JSX.Element {
   const difficulty = view.difficulty ?? 'medium';
 
   return (
-    <div className="relative flex min-h-full flex-col">
+    <div className="relative flex h-screen flex-col overflow-hidden">
       <DayNightBackdrop isNight={view.isNight} dayNumber={view.dayNumber} />
 
-      <div className="relative z-10">
-      <div className="flex items-center justify-between border-b border-white/10 bg-night-900/60 px-3 py-1 text-xs">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center justify-between border-b border-white/10 bg-night-900/60 px-3 py-1 text-xs">
         <span>
           房间码：<span className="font-bold text-amber-300 tracking-widest">{identity.roomCode}</span>
           <span className="ml-3 text-white/50">
@@ -100,53 +100,64 @@ export default function GamePage(): JSX.Element {
       </div>
 
       <StatusBar />
-      <JudgeAnnouncer />
 
-      {showStart && (
-        <div className="mx-2 mb-2 rounded-lg border border-emerald-400/40 bg-night-800/60 p-3 text-center">
-          <div className="mb-2 text-sm text-white/70">
-            房间就绪。开局将自动补满 AI 席位（空座由 AI 顶上），法官主持全程。
-          </div>
-          {/* 迭代4 F3：房主开局前选择 AI 难度（默认中） */}
-          <div className="mb-2 flex items-center justify-center gap-2 text-sm">
-            <span className="text-white/60">AI 游戏智商：</span>
-            {(['low', 'medium', 'high'] as const).map((d) => (
-              <button
-                key={d}
-                type="button"
-                disabled={d === difficulty}
-                onClick={() => void setDifficulty(d).catch((e) => showToast(String(e.message)))}
-                className={`rounded-md px-3 py-1 text-xs transition ${
-                  d === difficulty
-                    ? 'bg-emerald-500/80 text-white'
-                    : 'border border-white/20 bg-white/5 text-white/70 hover:bg-white/10'
-                }`}
-              >
-                {DIFFICULTY_LABEL[d]}
-                {d === 'medium' && '（默认）'}
-              </button>
-            ))}
-          </div>
-          <Button variant="contained" onClick={() => void startGame().catch((e) => showToast(String(e.message)))}>
-            开始游戏
-          </Button>
-        </div>
-      )}
+      {/* 迭代6 布局改版：主区（座位/身份/投票/操作） + 右侧发言聊天侧栏（约 1/4 列宽） */}
+      <div className="flex min-h-0 flex-1">
+        {/* 主区：可独立滚动 */}
+        <div className="min-w-0 flex-1 overflow-y-auto speech-scroll">
+          <JudgeAnnouncer />
 
-      <div className="grid grid-cols-1 gap-2 px-2 md:grid-cols-3">
-        <div className="md:col-span-2">
-          <SeatGrid highlightSeat={view.currentSpeakerSeat ?? null} />
+          {showStart && (
+            <div className="mx-2 mb-2 rounded-xl border border-emerald-400/40 bg-night-800/60 p-3 text-center">
+              <div className="mb-2 text-sm text-white/70">
+                房间就绪。开局将自动补满 AI 席位（空座由 AI 顶上），法官主持全程。
+              </div>
+              {/* 迭代4 F3：房主开局前选择 AI 难度（默认中） */}
+              <div className="mb-2 flex items-center justify-center gap-2 text-sm">
+                <span className="text-white/60">AI 游戏智商：</span>
+                {(['low', 'medium', 'high'] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    disabled={d === difficulty}
+                    onClick={() => void setDifficulty(d).catch((e) => showToast(String(e.message)))}
+                    className={`rounded-lg px-3 py-1 text-xs transition ${
+                      d === difficulty
+                        ? 'bg-emerald-500/80 text-white'
+                        : 'border border-white/20 bg-white/5 text-white/70 hover:bg-white/10'
+                    }`}
+                  >
+                    {DIFFICULTY_LABEL[d]}
+                    {d === 'medium' && '（默认）'}
+                  </button>
+                ))}
+              </div>
+              <Button variant="contained" onClick={() => void startGame().catch((e) => showToast(String(e.message)))}>
+                开始游戏
+              </Button>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-2 px-2 md:grid-cols-3">
+            <div className="md:col-span-2">
+              <SeatGrid highlightSeat={view.currentSpeakerSeat ?? null} />
+            </div>
+            <div className="space-y-2">
+              <RoleCard />
+              <NightPanel />
+            </div>
+          </div>
+
+          <VotePanel />
+          <SpeechCountdown />
+          <ActionArea />
         </div>
-        <div className="space-y-2">
-          <RoleCard />
-          <NightPanel />
-        </div>
+
+        {/* 右侧发言侧栏：聊天记录式滚动流 */}
+        <aside className="hidden w-64 shrink-0 flex-col border-l border-white/10 bg-night-900/70 backdrop-blur-sm md:flex xl:w-80">
+          <SpeechFeed />
+        </aside>
       </div>
-
-      <SpeechFeed />
-      <VotePanel />
-      <SpeechCountdown />
-      <ActionArea />
       </div>
 
       {/* 胜负弹窗 */}

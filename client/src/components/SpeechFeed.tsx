@@ -95,63 +95,96 @@ export default function SpeechFeed(): JSX.Element {
   }, [view?.speeches.length, deaths.length, voteResult, gameOver, revealCount]);
 
   return (
-    <div className="mx-2 mb-2 flex-1 min-h-40 overflow-y-auto rounded-lg border border-white/10 bg-night-900/60 p-2 speech-scroll text-sm">
-      {speeches.length === 0 && deaths.length === 0 && (
-        <div className="text-white/50">发言与事件将在这里滚动显示……</div>
-      )}
-      {speeches.map((s, i) => {
-        // 队列纪律：index < revealCount 已讲完（全量显示）；index === revealCount 正在讲（打字/即将打）；
-        // index > revealCount 排队中（暂时不渲染，保证"一次只有一位玩家发言"）
-        if (i > revealCount) return null;
-        const isTypingNow = i === revealCount && s.isAI === true;
-        return (
-          <div key={i} className="mb-1.5 flex gap-2">
-            <AvatarBadge avatarId={s.avatarId} size={28} />
-            <div>
-              <span className="font-bold text-amber-300">
-                {s.seat}号·{s.name}
-                {s.isAI ? '🤖' : ''}
-                {s.isLastWords ? '（遗言）' : ''}：
-              </span>
-              {isTypingNow ? (
-                <TypewriterText
-                  text={s.content}
-                  stream
-                  onDone={() => setRevealCount((c) => (c === i ? c + 1 : c))}
-                />
-              ) : (
-                <span className="text-white/85">{s.content}</span>
-              )}
-              <button
-                type="button"
-                title="点击重播这条发言"
-                className="ml-1 text-xs text-emerald-300/70 hover:text-emerald-300"
-                onClick={() => replaySpeech(s.avatarId, `${s.name}说：${s.content}`, s.isAI ? 'ai' : 'judge')}
-              >
-                🔊
-              </button>
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* 侧栏标题 */}
+      <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-2">
+        <span className="text-sm font-bold text-white/80">🗣️ 发言记录</span>
+        {view && view.dayNumber > 0 && (
+          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/60">
+            第 {view.dayNumber} {view.isNight ? '夜' : '天'}
+          </span>
+        )}
+      </div>
+      {/* 聊天记录流 */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 speech-scroll text-sm">
+        {speeches.length === 0 && deaths.length === 0 && (
+          <div className="text-white/50">发言与事件将在这里像聊天记录一样滚动显示……</div>
+        )}
+        {speeches.map((s, i) => {
+          // 队列纪律：index < revealCount 已讲完（全量显示）；index === revealCount 正在讲（打字/即将打）；
+          // index > revealCount 排队中（暂时不渲染，保证"一次只有一位玩家发言"）
+          if (i > revealCount) return null;
+          const isTypingNow = i === revealCount && s.isAI === true;
+          const isHuman = s.isAI !== true;
+          return (
+            <div key={i} className="group mb-2.5 flex items-start gap-2">
+              {/* 聊天气泡：头像在左，气泡在右 */}
+              <div className="mt-0.5 shrink-0">
+                <AvatarBadge avatarId={s.avatarId} size={32} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="mb-0.5 flex items-center gap-1.5 text-[11px]">
+                  <span className={`font-bold ${isHuman ? 'text-amber-300' : 'text-sky-300'}`}>
+                    {s.seat}号·{s.name}
+                  </span>
+                  {s.isAI && <span className="text-white/40">🤖</span>}
+                  {s.isLastWords && (
+                    <span className="rounded bg-red-400/20 px-1 text-red-300">遗言</span>
+                  )}
+                  <button
+                    type="button"
+                    title="点击重播这条发言"
+                    className="ml-auto text-xs text-emerald-300/0 transition group-hover:text-emerald-300/80 hover:text-emerald-300"
+                    onClick={() => replaySpeech(s.avatarId, `${s.name}说：${s.content}`, s.isAI ? 'ai' : 'judge')}
+                  >
+                    🔊
+                  </button>
+                </div>
+                <div
+                  className={`inline-block max-w-full break-words rounded-2xl px-2.5 py-1.5 leading-relaxed ${
+                    isHuman
+                      ? 'rounded-tl-sm border border-amber-300/25 bg-amber-400/10 text-white/90'
+                      : 'rounded-tl-sm border border-white/10 bg-white/5 text-white/85'
+                  }`}
+                >
+                  {isTypingNow ? (
+                    <TypewriterText
+                      text={s.content}
+                      stream
+                      onDone={() => setRevealCount((c) => (c === i ? c + 1 : c))}
+                    />
+                  ) : (
+                    <span>{s.content}</span>
+                  )}
+                  {isTypingNow && <span className="ml-0.5 animate-pulse text-emerald-300">▌</span>}
+                </div>
+              </div>
             </div>
+          );
+        })}
+        {deaths.map((d, i) => (
+          <div key={`d-${i}`} className="my-2 text-center">
+            <span className="inline-block rounded-full bg-red-500/15 px-3 py-1 text-xs text-red-300">
+              ⚰️ {d.cause === 'exile' ? `${d.seats.map((s) => `${s}号`).join('、')} 被放逐出局` : `昨夜 ${d.seats.map((s) => `${s}号`).join('、')} 死亡`}
+            </span>
           </div>
-        );
-      })}
-      {deaths.map((d, i) => (
-        <div key={`d-${i}`} className="mb-1.5 text-red-400">
-          ⚰️ {d.cause === 'exile' ? `${d.seats.map((s) => `${s}号`).join('、')} 被放逐出局` : `昨夜 ${d.seats.map((s) => `${s}号`).join('、')} 死亡`}
-        </div>
-      ))}
-      {voteResult && (
-        <div className="mb-1.5 text-sky-300">
-          🗳️ 票数：{voteResult.tally.map((t) => `${t.seat}号${t.count}票`).join('、') || '无有效票'}
-          {voteResult.exiledSeat !== null && ` → ${voteResult.exiledSeat}号 出局`}
-          {voteResult.isPK && '（PK 投票）'}
-        </div>
-      )}
-      {gameOver && (
-        <div className={`mb-1.5 font-bold ${gameOver.winner === 'WEREWOLF' ? 'text-red-400' : 'text-emerald-400'}`}>
-          🏁 游戏结束：{gameOver.winner === 'WEREWOLF' ? '狼人阵营胜利！' : '好人阵营胜利！'} {gameOver.reason}
-        </div>
-      )}
-      <div ref={bottomRef} />
+        ))}
+        {voteResult && (
+          <div className="my-2 text-center">
+            <span className="inline-block rounded-full bg-sky-500/15 px-3 py-1 text-xs text-sky-300">
+              🗳️ {voteResult.tally.map((t) => `${t.seat}号${t.count}票`).join('、') || '无有效票'}
+              {voteResult.exiledSeat !== null && ` → ${voteResult.exiledSeat}号 出局`}
+              {voteResult.isPK && '（PK）'}
+            </span>
+          </div>
+        )}
+        {gameOver && (
+          <div className={`mb-1.5 text-center font-bold ${gameOver.winner === 'WEREWOLF' ? 'text-red-400' : 'text-emerald-400'}`}>
+            🏁 游戏结束：{gameOver.winner === 'WEREWOLF' ? '狼人阵营胜利！' : '好人阵营胜利！'} {gameOver.reason}
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }

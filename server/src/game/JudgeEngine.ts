@@ -201,6 +201,18 @@ export class JudgeEngine {
     const state = this.host.getState();
     const player = state.players.find((p) => p.id === playerId);
     if (!player || !player.alive) return { ok: false, message: '死者无投票权' };
+    // 迭代6修复：目标必须在候选内（普通轮=存活玩家；PK 轮=平票者），且不能投自己
+    const candidates = state.voteCandidates ?? [];
+    if (state.phase === Phase.DAY_VOTE || state.phase === Phase.DAY_PK) {
+      if (!candidates.includes(targetSeat)) {
+        return {
+          ok: false,
+          message:
+            state.phase === Phase.DAY_PK ? 'PK 投票只能投给平票的玩家' : '只能投给存活的玩家',
+        };
+      }
+      if (targetSeat === player.seat) return { ok: false, message: '不能投给自己' };
+    }
     if (this.voteGate?.isPending(player.seat)) {
       const accepted = this.voteGate.resolve(player.seat, { targetSeat });
       if (accepted) {

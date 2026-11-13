@@ -216,6 +216,11 @@ export interface GameStateView {
   isMySpeechTurn?: boolean;
   /** 投票候选座位（DAY_VOTE / DAY_PK 阶段） */
   voteCandidates?: number[];
+  /**
+   * 本玩家在当前阶段是否拥有投票权（前端据此渲染投票面板或等待态）：
+   * DAY_VOTE = 存活即可投；DAY_PK = 存活且不是平票者（平票者本人不参与 PK 再投票）。
+   */
+  selfCanVote?: boolean;
   winner?: Winner;
   /** 胜负原因描述 */
   winnerReason?: string;

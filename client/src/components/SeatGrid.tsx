@@ -26,7 +26,7 @@ export default function SeatGrid({ selectableSeats = [], onSeatClick, highlightS
   const showPlaceholder = view.phase === Phase.LOBBY;
 
   return (
-    <div className="grid grid-cols-3 gap-2 px-3">
+    <div className="grid grid-cols-3 gap-3 px-3">
       {seats.map((seat) => {
         const p = occupied.get(seat);
         // 空座占位态：仅大厅阶段渲染（对局中席位恒满员）
@@ -37,10 +37,10 @@ export default function SeatGrid({ selectableSeats = [], onSeatClick, highlightS
           return (
             <div
               key={`empty-${seat}`}
-              className="rounded-lg border border-dashed border-white/20 bg-night-900/40 p-2 text-left"
+              className="rounded-xl border border-dashed border-white/20 bg-night-900/40 p-2.5 text-left"
             >
               <div className="flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xl">⏳</div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xl">⏳</div>
                 <div className="min-w-0">
                   <div className="truncate text-sm font-bold text-white/40">{seat}号 等待玩家加入…</div>
                   <div className="text-[10px] text-white/40">空座开局时自动补 AI</div>
@@ -63,15 +63,21 @@ export default function SeatGrid({ selectableSeats = [], onSeatClick, highlightS
             type="button"
             disabled={!selectable}
             onClick={() => selectable && onSeatClick?.(p.seat)}
-            className={`rounded-lg border p-2 text-left transition ${
+            className={`rounded-xl border p-2.5 text-left shadow-lg shadow-black/20 transition ${
               p.alive ? '' : 'opacity-40 grayscale'
-            } ${selectable ? 'border-amber-400/80 bg-amber-400/10 cursor-pointer hover:bg-amber-400/20' : 'border-white/10 bg-night-800/60'} ${
-              highlightSeat === p.seat ? 'ring-2 ring-emerald-400' : ''
+            } ${
+              selectable
+                ? 'cursor-pointer border-amber-400/80 bg-amber-400/10 hover:bg-amber-400/20'
+                : 'border-white/10 bg-night-800/60'
+            } ${highlightSeat === p.seat ? 'ring-2 ring-emerald-400' : ''} ${
+              isSelf && highlightSeat !== p.seat ? 'ring-1 ring-amber-300/40' : ''
             }`}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               {/* 迭代4 F4：AI 使用英雄联盟原画风格形象图（缺失回退 emoji） */}
-              <AvatarBadge avatarId={p.avatarId} dead={!p.alive} />
+              <div className="rounded-full ring-2 ring-white/15">
+                <AvatarBadge avatarId={p.avatarId} dead={!p.alive} />
+              </div>
               <div className="min-w-0">
                 <div className="truncate text-sm font-bold">
                   {p.seat}号 {p.name}
@@ -83,15 +89,21 @@ export default function SeatGrid({ selectableSeats = [], onSeatClick, highlightS
                 </div>
               </div>
             </div>
-            <div className="mt-1 text-[11px]">
+            <div className="mt-1.5">
               {p.alive ? (
                 typing ? (
-                  <span className="text-emerald-300 animate-pulse">打字中…</span>
+                  <span className="inline-block rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] text-emerald-300 animate-pulse">
+                    打字中…
+                  </span>
                 ) : (
-                  <span className="text-emerald-400">✔ 存活</span>
+                  <span className="inline-block rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400">
+                    ✔ 存活
+                  </span>
                 )
               ) : (
-                <span className="text-red-400">✖ 出局</span>
+                <span className="inline-block rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] text-red-400">
+                  ✖ 出局
+                </span>
               )}
             </div>
           </button>

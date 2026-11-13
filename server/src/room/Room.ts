@@ -298,6 +298,7 @@ export class Room {
         voteSummary: { votedCount: 0, totalVoters: 0, tally: [], exiledSeat: null, isPK: false },
         roomStatus: this.roomStatus,
         speechDeadlineMs: null,
+        selfCanVote: false,
         difficulty: state.difficulty,
       };
     }
@@ -325,6 +326,10 @@ export class Room {
         (state.phase === Phase.DAY_SPEECH || state.phase === Phase.DAY_PK),
       voteCandidates:
         state.phase === Phase.DAY_VOTE || state.phase === Phase.DAY_PK ? (state.voteCandidates ?? []) : undefined,
+      selfCanVote:
+        self.alive &&
+        (state.phase === Phase.DAY_VOTE ||
+          (state.phase === Phase.DAY_PK && !(state.voteCandidates ?? []).includes(self.seat))),
       winner: state.winner,
       winnerReason: state.winnerReason,
       roomStatus: this.roomStatus,
