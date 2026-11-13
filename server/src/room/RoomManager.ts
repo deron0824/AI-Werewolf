@@ -241,12 +241,14 @@ export class RoomManager {
     return this.rooms.get(roomId)?.submitLastWords(playerId, content) ?? { ok: false, message: '房间不存在' };
   }
 
-  /** 结束后同房原子重开（重置→重建引擎→广播 game:restart→立即开局）：仅房主可发、仅 FINISHED 可调 */
-  restartGame(roomId: string, playerId: string): { ok: boolean; message?: string } {
+  /**
+   * 迭代7 —— 结束后“继续游戏”确认：任一真人玩家可点（不再限定房主）。
+   * 两名真人都确认后同房原子重开（reset → 重建引擎 → game:restart → 立即开局）。
+   */
+  continueGame(roomId: string, playerId: string): { ok: boolean; message?: string } {
     const room = this.rooms.get(roomId);
     if (!room) return { ok: false, message: '房间不存在' };
-    if (!room.isHost(playerId)) return { ok: false, message: '只有房主才能重开游戏' };
-    return room.restart(AI_ROSTER);
+    return room.requestContinue(playerId, AI_ROSTER);
   }
 
   /** 断连处理 */

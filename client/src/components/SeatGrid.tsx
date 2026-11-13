@@ -1,9 +1,10 @@
 /**
- * SeatGrid —— 6 席网格：头像/昵称/AI 标识/死亡置灰/打字中动效。
- * 迭代2：空座渲染“等待玩家加入”占位态（2 号真人预留席附房间码邀请提示，拍板①）。
+ * SeatGrid —— 6 席网格（迭代7 改版：大尺寸方正卡片 + 大头像，增强交互感）：
+ * 头像/昵称/AI 标识/死亡置灰/打字中动效/结算翻牌角色名。
+ * 迭代2：空座渲染"等待玩家加入"占位态（2 号真人预留席附房间码邀请提示，拍板①）。
  */
 
-import { Phase } from '@werewolf/shared';
+import { Phase, Role } from '@werewolf/shared';
 
 import { AvatarBadge } from './avatars';
 import { useGameContext } from '../state/GameContext';
@@ -16,6 +17,14 @@ interface SeatGridProps {
   highlightSeat?: number | null;
 }
 
+/** 结算翻牌后的角色展示名 */
+const ROLE_LABEL: Record<string, { text: string; cls: string }> = {
+  [Role.WEREWOLF]: { text: '🐺 狼人', cls: 'bg-red-500/20 text-red-300' },
+  [Role.SEER]: { text: '🔮 预言家', cls: 'bg-sky-500/20 text-sky-300' },
+  [Role.WITCH]: { text: '⚗️ 女巫', cls: 'bg-purple-500/20 text-purple-300' },
+  [Role.VILLAGER]: { text: '🧑‍🌾 平民', cls: 'bg-emerald-500/20 text-emerald-300' },
+};
+
 export default function SeatGrid({ selectableSeats = [], onSeatClick, highlightSeat }: SeatGridProps): JSX.Element {
   const { view, identity, typingSeats } = useGameContext();
   if (!view) return <div />;
@@ -26,7 +35,7 @@ export default function SeatGrid({ selectableSeats = [], onSeatClick, highlightS
   const showPlaceholder = view.phase === Phase.LOBBY;
 
   return (
-    <div className="grid grid-cols-3 gap-3 px-3">
+    <div className="grid grid-cols-2 gap-3 px-2 xl:grid-cols-3">
       {seats.map((seat) => {
         const p = occupied.get(seat);
         // 空座占位态：仅大厅阶段渲染（对局中席位恒满员）
@@ -37,17 +46,17 @@ export default function SeatGrid({ selectableSeats = [], onSeatClick, highlightS
           return (
             <div
               key={`empty-${seat}`}
-              className="rounded-xl border border-dashed border-white/20 bg-night-900/40 p-2.5 text-left"
+              className="rounded-2xl border border-dashed border-white/20 bg-night-900/40 p-4 text-left"
             >
-              <div className="flex items-center gap-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xl">⏳</div>
+              <div className="flex items-center gap-3">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-2xl">⏳</div>
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-bold text-white/40">{seat}号 等待玩家加入…</div>
-                  <div className="text-[10px] text-white/40">空座开局时自动补 AI</div>
+                  <div className="truncate text-base font-bold text-white/40">{seat}号 等待玩家加入…</div>
+                  <div className="text-xs text-white/40">空座开局时自动补 AI</div>
                 </div>
               </div>
               {isReservedForHuman && identity && (
-                <div className="mt-1 text-[11px] text-amber-300/80">
+                <div className="mt-2 text-xs text-amber-300/80">
                   邀请好友输入房间码 <span className="font-bold">{identity.roomCode}</span> 即可坐此席
                 </div>
               )}
@@ -57,14 +66,15 @@ export default function SeatGrid({ selectableSeats = [], onSeatClick, highlightS
         const isSelf = p.seat === view.self.seat;
         const selectable = selectableSeats.includes(p.seat);
         const typing = typingSeats.includes(p.seat);
+        const revealedRole = p.role ? ROLE_LABEL[p.role] : null;
         return (
           <button
             key={p.seat}
             type="button"
             disabled={!selectable}
             onClick={() => selectable && onSeatClick?.(p.seat)}
-            className={`rounded-xl border p-2.5 text-left shadow-lg shadow-black/20 transition ${
-              p.alive ? '' : 'opacity-40 grayscale'
+            className={`flex min-h-[148px] flex-col justify-between rounded-2xl border p-3.5 text-left shadow-lg shadow-black/30 transition ${
+              p.alive ? '' : 'opacity-45 grayscale'
             } ${
               selectable
                 ? 'cursor-pointer border-amber-400/80 bg-amber-400/10 hover:bg-amber-400/20'
@@ -73,35 +83,40 @@ export default function SeatGrid({ selectableSeats = [], onSeatClick, highlightS
               isSelf && highlightSeat !== p.seat ? 'ring-1 ring-amber-300/40' : ''
             }`}
           >
-            <div className="flex items-center gap-2.5">
-              {/* 迭代4 F4：AI 使用英雄联盟原画风格形象图（缺失回退 emoji） */}
+            <div className="flex items-center gap-3">
+              {/* 迭代4 F4：AI 使用英雄联盟原画风格形象图（缺失回退 emoji）；迭代7：大头像 */}
               <div className="rounded-full ring-2 ring-white/15">
-                <AvatarBadge avatarId={p.avatarId} dead={!p.alive} />
+                <AvatarBadge avatarId={p.avatarId} size={56} dead={!p.alive} />
               </div>
               <div className="min-w-0">
-                <div className="truncate text-sm font-bold">
+                <div className="truncate text-base font-bold">
                   {p.seat}号 {p.name}
-                  {isSelf && <span className="ml-1 text-amber-300 text-xs">(你)</span>}
+                  {isSelf && <span className="ml-1 text-xs text-amber-300">(你)</span>}
                 </div>
-                <div className="text-[10px] text-white/60">
-                  {p.isHuman ? '👤 真人' : `🤖 AI`}
-                  {p.role && <span className="ml-1 text-amber-300">·已翻牌</span>}
-                </div>
+                <div className="text-xs text-white/60">{p.isHuman ? '👤 真人' : '🤖 AI'}</div>
               </div>
             </div>
-            <div className="mt-1.5">
+            {/* 结算翻牌：角色名徽章（迭代7） */}
+            {revealedRole && (
+              <div className="mt-2">
+                <span className={`inline-block rounded-lg px-2.5 py-1 text-xs font-bold ${revealedRole.cls}`}>
+                  {revealedRole.text}
+                </span>
+              </div>
+            )}
+            <div className="mt-2">
               {p.alive ? (
                 typing ? (
-                  <span className="inline-block rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] text-emerald-300 animate-pulse">
+                  <span className="inline-block animate-pulse rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300">
                     打字中…
                   </span>
                 ) : (
-                  <span className="inline-block rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-400">
+                  <span className="inline-block rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-400">
                     ✔ 存活
                   </span>
                 )
               ) : (
-                <span className="inline-block rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] text-red-400">
+                <span className="inline-block rounded-full bg-red-500/15 px-2.5 py-1 text-xs text-red-400">
                   ✖ 出局
                 </span>
               )}

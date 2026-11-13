@@ -176,6 +176,12 @@ export default function SpeechFeed(): JSX.Element {
               {voteResult.exiledSeat !== null && ` → ${voteResult.exiledSeat}号 出局`}
               {voteResult.isPK && '（PK）'}
             </span>
+            {/* 迭代7：票型明细（谁投给谁） */}
+            {(voteResult.details?.length ?? 0) > 0 && (
+              <div className="mt-1 text-[11px] text-white/55">
+                {voteResult.details.map((d) => `${d.voterSeat}→${d.targetSeat}`).join('、')}
+              </div>
+            )}
           </div>
         )}
         {gameOver && (

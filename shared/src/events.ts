@@ -53,11 +53,13 @@ export interface VoteProgressPayload {
   totalVoters: number;
 }
 
-/** 投票结果 vote:result */
+/** 投票结果 vote:result（迭代7：details = 谁投给谁的完整票型明细，投票结束后公开） */
 export interface VoteResultPayload {
   tally: { seat: number; count: number }[];
   exiledSeat: number | null;
   isPK: boolean;
+  /** 票型明细：voterSeat → targetSeat（弃票的真人不在列表中） */
+  details: { voterSeat: number; targetSeat: number }[];
 }
 
 /** LLM 状态 llm:status */

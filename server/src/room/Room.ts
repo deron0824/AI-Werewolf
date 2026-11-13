@@ -50,6 +50,8 @@ export class Room {
   private roomStatus: RoomStatus = 'WAITING';
   /** 上几局归档复盘（拍板③：重开不删旧局数据，复盘下载仍可取旧局） */
   private archivedRecords: GameRecordJSON[] = [];
+  /** 迭代7：已确认“继续游戏”的真人玩家 id 集合（结算画面双人确认后同房开新局） */
+  private continueVotes = new Set<string>();
   private io: SocketIOServer<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
   /** playerId → socket 集合（同一浏览器多标签兼容） */
   private sockets = new Map<string, Set<Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>>>();
@@ -328,8 +330,14 @@ export class Room {
         state.phase === Phase.DAY_VOTE || state.phase === Phase.DAY_PK ? (state.voteCandidates ?? []) : undefined,
       selfCanVote:
         self.alive &&
+        (state.voteCollecting ?? true) === true &&
         (state.phase === Phase.DAY_VOTE ||
           (state.phase === Phase.DAY_PK && !(state.voteCandidates ?? []).includes(self.seat))),
+      // 迭代7：投票收集窗口状态（前端据此切换投票面板/票型明细展示）
+      voteCollecting: state.voteCollecting ?? true,
+      // 迭代7：结算画面——已确认“继续游戏”的真人座位 + 本局全部票型明细（仅分出胜负后公开）
+      continueConfirmed: this.roomStatus === 'FINISHED' ? [...this.continueVotes].map((pid) => this.state.players.find((p) => p.id === pid)?.seat ?? 0).filter((s) => s > 0) : undefined,
+      voteHistory: state.winner !== null ? state.votes : undefined,
       winner: state.winner,
       winnerReason: state.winnerReason,
       roomStatus: this.roomStatus,
@@ -415,6 +423,29 @@ export class Room {
   }
 
   /**
+   * 迭代7 —— 结束后“继续游戏”确认：任一真人可点（不再限定房主）。
+   * 两名真人都确认后，同房间原子重开一局（不带上一局任何信息：身份重发、发言/票型/夜晚记录全部归零）。
+   * 单人确认时广播 state:sync 让对方看到“X/2 已确认”。
+   */
+  requestContinue(playerId: string, roster: AIRosterEntry[]): { ok: boolean; message?: string; started?: boolean } {
+    if (this.roomStatus !== 'FINISHED') {
+      return { ok: false, message: '游戏尚未结束，无法确认继续' };
+    }
+    const player = this.state.players.find((p) => p.id === playerId);
+    if (!player || !player.isHuman) {
+      return { ok: false, message: '只有真人玩家可以确认继续' };
+    }
+    this.continueVotes.add(playerId);
+    this.syncViews();
+    if (this.continueVotes.size >= this.humanCount) {
+      this.continueVotes.clear();
+      const result = this.restart(roster);
+      return { ok: result.ok, message: result.message, started: result.ok };
+    }
+    return { ok: true };
+  }
+
+  /**
    * 原子重开（迭代2 F6）：仅 FINISHED 可调（RUNNING 拒绝，错误码 2003）。
    * 执行顺序：重置状态与记录 → 重建 JudgeEngine → 广播 game:restart → 立即发牌开新局。
    * rejoinToken / sockets 绑定不销毁（跨局永久有效，直到房间销毁）。
@@ -439,6 +470,7 @@ export class Room {
   /** 重置 GameState（restart 用）：成员名单保留，对局数据全部归零 */
   private resetGameState(): void {
     this.record.reset();
+    this.continueVotes.clear();
     this.state.dayNumber = 0;
     this.state.isNight = false;
     this.state.phase = Phase.LOBBY;

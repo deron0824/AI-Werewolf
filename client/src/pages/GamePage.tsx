@@ -6,7 +6,7 @@
 import { useState } from 'react';
 
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Snackbar } from '@mui/material';
-import { Phase } from '@werewolf/shared';
+import { Phase, Role } from '@werewolf/shared';
 
 import { useGameContext } from '../state/GameContext';
 import StatusBar from '../components/StatusBar';
@@ -23,6 +23,13 @@ import GameRecordDialog from '../components/GameRecordDialog';
 import RuleDialog from '../components/RuleDialog';
 
 const DIFFICULTY_LABEL: Record<string, string> = { low: '低 80%', medium: '中 100%', high: '高 120%' };
+
+const ROLE_LABEL: Record<string, string> = {
+  [Role.WEREWOLF]: '🐺 狼人',
+  [Role.SEER]: '🔮 预言家',
+  [Role.WITCH]: '⚗️ 女巫',
+  [Role.VILLAGER]: '🧑‍🌾 平民',
+};
 
 /** 昼夜背景层：两张背景图按 isNight 交叉淡入淡出（1s 过渡） */
 function DayNightBackdrop({ isNight, dayNumber }: { isNight: boolean; dayNumber: number }): JSX.Element {
@@ -62,6 +69,7 @@ export default function GamePage(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [continuing, setContinuing] = useState(false);
 
   if (!view || !identity) {
     return <div className="p-6 text-white/60">正在恢复对局……（若长时间无响应请回大厅重新加入）</div>;
@@ -70,6 +78,9 @@ export default function GamePage(): JSX.Element {
   const isHost = identity.isHost;
   const showStart = view.phase === Phase.LOBBY && isHost && !gameOver;
   const difficulty = view.difficulty ?? 'medium';
+  // 迭代7 F2：结算画面 —— 双真人都点“继续游戏”才同房开新局
+  const humanCount = view.players.filter((p) => p.isHuman).length;
+  const confirmedSelf = (view.continueConfirmed ?? []).includes(view.self.seat);
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden">
@@ -138,11 +149,12 @@ export default function GamePage(): JSX.Element {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-2 px-2 md:grid-cols-3">
-            <div className="md:col-span-2">
+          {/* 迭代7 布局：座位卡放大（3/5 宽），身份牌 + 夜间技能区（2/5 宽） */}
+          <div className="grid grid-cols-1 gap-2 px-2 md:grid-cols-5">
+            <div className="md:col-span-3">
               <SeatGrid highlightSeat={view.currentSpeakerSeat ?? null} />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 md:col-span-2">
               <RoleCard />
               <NightPanel />
             </div>
@@ -160,22 +172,80 @@ export default function GamePage(): JSX.Element {
       </div>
       </div>
 
-      {/* 胜负弹窗 */}
-      <Dialog open={gameOver !== null} onClose={() => undefined}>
-        <DialogTitle>{gameOver?.winner === 'WEREWOLF' ? '🐺 狼人阵营胜利！' : '🌱 好人阵营胜利！'}</DialogTitle>
+      {/* 结算画面（迭代7 改版）：全员可见 —— 胜负 + 全员翻牌 + 全部票型明细 + 双人确认继续 */}
+      <Dialog open={gameOver !== null} onClose={() => undefined} maxWidth="sm" fullWidth>
+        <DialogTitle className="text-center text-xl">
+          {gameOver?.winner === 'WEREWOLF' ? '🐺 狼人阵营胜利！' : '🌱 好人阵营胜利！'}
+        </DialogTitle>
         <DialogContent>
           <div className="text-sm text-white/80">{gameOver?.reason}</div>
-        </DialogContent>
-        <DialogActions>
-          {isHost && (
-            <Button
-              variant="contained"
-              onClick={() => void restartGame().catch((e) => showToast(String(e.message)))}
-            >
-              同房重开一局
-            </Button>
+
+          {/* 全员翻牌 */}
+          <div className="mt-3 rounded-xl border border-white/10 bg-night-900/60 p-3">
+            <div className="mb-2 text-sm font-bold text-amber-300">全场身份翻牌</div>
+            <div className="grid grid-cols-2 gap-1.5 text-sm">
+              {view.players.map((p) => (
+                <div key={p.seat} className={`flex items-center justify-between rounded-lg px-2.5 py-1.5 ${p.alive ? 'bg-white/5' : 'bg-white/5 opacity-60'}`}>
+                  <span>
+                    {p.seat}号 {p.name}
+                    {p.seat === view.self.seat && <span className="ml-1 text-xs text-amber-300">(你)</span>}
+                  </span>
+                  <span className={p.role === Role.WEREWOLF ? 'font-bold text-red-400' : 'text-white/85'}>
+                    {p.role ? ROLE_LABEL[p.role] : '未知'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 全部票型明细（迭代7 F3） */}
+          {(view.voteHistory?.length ?? 0) > 0 && (
+            <div className="mt-3 rounded-xl border border-white/10 bg-night-900/60 p-3">
+              <div className="mb-2 text-sm font-bold text-sky-300">本局全部票型</div>
+              <div className="space-y-1 text-xs leading-relaxed text-white/75">
+                {(() => {
+                  const votes = view.voteHistory ?? [];
+                  const groups = new Map<string, string[]>();
+                  for (const v of votes) {
+                    const key = `第${v.dayNumber}天${v.isPK ? '·PK' : ''}`;
+                    const arr = groups.get(key) ?? [];
+                    arr.push(`${v.voterSeat}号 → ${v.targetSeat}号`);
+                    groups.set(key, arr);
+                  }
+                  return [...groups.entries()].map(([key, items]) => (
+                    <div key={key}>
+                      <span className="font-bold text-white/85">{key}：</span>
+                      {items.join('，')}
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
           )}
-          <Button onClick={leaveRoom}>回大厅</Button>
+
+          {/* 继续游戏（迭代7 F2）：双真人都确认后同房开新局，不带上局任何信息 */}
+          <div className="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-center text-sm">
+            <div className="text-white/80">
+              已确认继续：<span className="font-bold text-emerald-300">{view.continueConfirmed?.length ?? 0} / {humanCount}</span> 人
+              {confirmedSelf && <span className="ml-2 text-emerald-300">（你已确认，等待对方…）</span>}
+            </div>
+          </div>
+        </DialogContent>
+        <DialogActions className="justify-center pb-4">
+          <Button
+            variant="contained"
+            color="success"
+            disabled={confirmedSelf || continuing}
+            onClick={() => {
+              setContinuing(true);
+              void restartGame()
+                .catch((e) => showToast(String(e.message)))
+                .finally(() => setContinuing(false));
+            }}
+          >
+            {confirmedSelf ? '已确认，等待对方…' : '✔ 继续游戏（同房开新局）'}
+          </Button>
+          <Button onClick={leaveRoom}>退出房间</Button>
         </DialogActions>
       </Dialog>
 

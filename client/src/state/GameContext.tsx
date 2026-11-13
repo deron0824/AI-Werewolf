@@ -372,6 +372,10 @@ export function GameProvider({ children }: { children: ReactNode }): JSX.Element
     });
   }, []);
 
+  /**
+   * 结束后“继续游戏”确认（迭代7 F2）：任一真人玩家可点（不再限定房主）。
+   * 两名真人都确认后，服务端同房原子重开一局（不带上局任何信息）。
+   */
   const restartGame = useCallback(async () => {
     const socket = getSocket();
     await new Promise<void>((resolve, reject) => {

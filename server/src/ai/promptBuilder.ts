@@ -57,6 +57,11 @@ function situationSummary(view: GameStateView): string {
     text += `本局尚未发言过的玩家：${notSpoken.join('、')}（他们还没有说过任何话）。\n`;
   }
   text += `引用规则：评论或转述他人发言时，只能引用上面"发言记录"中真实出现的内容；严禁编造、脑补或转述记录里不存在的发言（例如说某人"刚才说过什么"而记录里并没有）。\n`;
+  // 迭代7 反幻觉护栏②：已出局玩家不能被当作在场目标（实测问题：AI 提议"投已出局的 1 号"）
+  const deadSeats = view.players.filter((p) => !p.alive).map((p) => `${p.seat}号`);
+  if (deadSeats.length > 0) {
+    text += `出局规则：${deadSeats.join('、')} 已经出局离场！他们不能再被投票、不能再被刀、不能作为任何行动或指责的目标。你可以引用死者生前发言作为推理线索，但你的发言分析与投票意向只能针对存活玩家（${alive.join('、') || '无'}）。\n`;
+  }
   return text;
 }
 

@@ -719,6 +719,7 @@ export class JudgeEngine {
     const alivePlayers = state.players.filter((p) => p.alive);
     const candidates = alivePlayers.map((p) => p.seat);
     state.voteCandidates = candidates;
+    state.voteCollecting = true;
     this.host.syncViews();
     this.say('发言结束，进入投票放逐环节。请全体存活玩家投票。');
 
@@ -726,10 +727,14 @@ export class JudgeEngine {
     state.votes.push(...votes);
     votes.forEach((v) => this.record.logVote(v));
     const tally = tallyVotes(votes);
+    // 迭代7：投票结束 → 关闭收集窗口，广播完整票型明细（谁投给谁）
+    state.voteCollecting = false;
+    this.host.syncViews();
     this.host.broadcast('vote:result', {
       tally,
       exiledSeat: null,
       isPK: false,
+      details: votes.map((v) => ({ voterSeat: v.voterSeat, targetSeat: v.targetSeat })),
     });
     this.record.logTimeline(`第 ${state.dayNumber} 天投票明细：${JSON.stringify(tally)}`);
 
@@ -751,16 +756,20 @@ export class JudgeEngine {
       }
       this.setPhase(Phase.DAY_PK);
       state.voteCandidates = outcome.pkSeats;
+      state.voteCollecting = true;
       this.host.syncViews();
       this.say('PK 发言结束，请在平票者中再次投票。');
       const pkVotes = await this.collectVotes(pkVoters, outcome.pkSeats, true);
       state.votes.push(...pkVotes);
       pkVotes.forEach((v) => this.record.logVote(v));
       const pkTally = tallyVotes(pkVotes);
+      state.voteCollecting = false;
+      this.host.syncViews();
       this.host.broadcast('vote:result', {
         tally: pkTally,
         exiledSeat: null,
         isPK: true,
+        details: pkVotes.map((v) => ({ voterSeat: v.voterSeat, targetSeat: v.targetSeat })),
       });
       const pkOutcome = resolveTally(pkTally);
       if (pkOutcome.exiledSeat !== null) {
@@ -871,6 +880,8 @@ export class JudgeEngine {
     if (outcome.winner === null) return false;
     state.winner = outcome.winner;
     state.winnerReason = outcome.reason;
+    // 迭代7：结算翻牌——全部座位身份公开（结算画面逐个展示角色）
+    for (const p of state.players) p.roleRevealed = true;
     this.setPhase(Phase.GAME_OVER);
     this.say(outcome.reason);
     this.record.finish(outcome.winner, outcome.reason);

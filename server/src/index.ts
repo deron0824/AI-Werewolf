@@ -186,7 +186,8 @@ async function main(): Promise<void> {
     });
 
     socket.on('game:restart-request', (_payload, ack) => {
-      const result = roomManager.restartGame(socket.data.roomId, socket.data.playerId);
+      // 迭代7：任一真人可发 = “继续游戏”确认票；两真人齐 → 同房重开
+      const result = roomManager.continueGame(socket.data.roomId, socket.data.playerId);
       ack({ ok: result.ok, error: result.ok ? undefined : result.message });
     });
 

@@ -184,6 +184,8 @@ export interface GameState {
   speechDeadlineMs?: number | null;
   /** 投票候选座位（DAY_VOTE / DAY_PK 阶段） */
   voteCandidates?: number[];
+  /** 投票收集窗口是否开启（服务端内部字段，随视图下发） */
+  voteCollecting?: boolean;
   /** 胜负原因描述 */
   winnerReason?: string;
   /** AI 难度（房主在大厅可调，开局后锁定；重开保留） */
@@ -221,6 +223,12 @@ export interface GameStateView {
    * DAY_VOTE = 存活即可投；DAY_PK = 存活且不是平票者（平票者本人不参与 PK 再投票）。
    */
   selfCanVote?: boolean;
+  /** 投票收集窗口是否开启（false = 投票已结束、结果公布中，前端据此展示票型明细） */
+  voteCollecting?: boolean;
+  /** 结算画面：已确认“继续游戏”的真人座位列表（仅 roomStatus=FINISHED 携带） */
+  continueConfirmed?: number[];
+  /** 结算画面：本局全部投票明细（仅分出胜负后下发，票型公开复盘） */
+  voteHistory?: VoteRecord[];
   winner?: Winner;
   /** 胜负原因描述 */
   winnerReason?: string;
