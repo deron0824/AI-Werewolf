@@ -17,6 +17,7 @@ import {
   type Player,
   type PotionState,
   type VoteRecord,
+  type VoteResultPayload,
   type ServerToClientEvents,
 } from '@werewolf/shared';
 
@@ -120,6 +121,8 @@ export class JudgeEngine {
   private speechWaiter: { seat: number; resolve: (content: string) => void } | null = null;
   /** 真人发言限时计时器（超时自动视为“过”，迭代2 F4） */
   private speechTimeoutTimer: NodeJS.Timeout | null = null;
+  /** 真人遗言限时计时器（超时自动跳过，防引擎死锁） */
+  private lastWordsTimeoutTimer: NodeJS.Timeout | null = null;
   /**
    * 迭代5 F2 —— 下一 AI 发言预取：当前发言展示期间，后台已开始生成下一位 AI 的发言陈词，
    * 轮到该 AI 时直接取现成结果（等待只剩打字动效），消除 AI 之间“展示完才开始想”的串行等待。
@@ -132,6 +135,9 @@ export class JudgeEngine {
 
   /** 本轮投票实时进度（真人投票提交时也广播） */
   private voteProgressState: { votedCount: number; totalVoters: number } | null = null;
+
+  /** 最近一次已公示的投票结果（刷新恢复通道：buildView 经 getter 带出） */
+  private lastVoteResultState: VoteResultPayload | null = null;
 
   private running = false;
   private loopPromise: Promise<void> | null = null;
@@ -291,6 +297,7 @@ export class JudgeEngine {
     state.speeches = [];
     state.votes = [];
     state.nights = [];
+    this.lastVoteResultState = null;
     this.record.start();
     this.setPhase(Phase.LOBBY);
     this.say(`游戏开始！本局板子：${this.config.name}。身份已随机发放。`);
@@ -575,7 +582,8 @@ export class JudgeEngine {
       this.say(`请 ${seat} 号留遗言。`);
       let content = '';
       if (player.isHuman) {
-        content = await this.waitForLastWords(seat);
+        // 带限时：玩家浏览器崩溃/断线时不再永久等待（防引擎死锁）
+        content = await this.waitForLastWordsWithTimeout(seat, appConfig.speech.lastWordsTimeLimitMs);
       } else {
         content = await this.aiWithTyping(player.seat, () =>
           this.ai.generateLastWords(player, this.host.buildView(player.id) as never),
@@ -727,18 +735,20 @@ export class JudgeEngine {
     state.votes.push(...votes);
     votes.forEach((v) => this.record.logVote(v));
     const tally = tallyVotes(votes);
+    const outcome = resolveTally(tally);
     // 迭代7：投票结束 → 关闭收集窗口，广播完整票型明细（谁投给谁）
     state.voteCollecting = false;
     this.host.syncViews();
-    this.host.broadcast('vote:result', {
+    const voteResultPayload: VoteResultPayload = {
       tally,
-      exiledSeat: null,
+      exiledSeat: outcome.exiledSeat,
       isPK: false,
       details: votes.map((v) => ({ voterSeat: v.voterSeat, targetSeat: v.targetSeat })),
-    });
+    };
+    this.lastVoteResultState = voteResultPayload;
+    this.host.broadcast('vote:result', voteResultPayload);
     this.record.logTimeline(`第 ${state.dayNumber} 天投票明细：${JSON.stringify(tally)}`);
 
-    const outcome = resolveTally(tally);
     if (outcome.exiledSeat !== null) {
       await this.exileSeat(outcome.exiledSeat, false);
       return;
@@ -752,6 +762,8 @@ export class JudgeEngine {
       const pkVoters = alivePlayers.filter((p) => !outcome.pkSeats.includes(p.seat));
       if (pkVoters.length === 0) {
         this.say('无有效投票人，当日为平安日，无人出局。');
+        // 平安日与放逐对齐：天数同样递增，避免次日 NightRecord.dayNumber 与当天重复
+        state.dayNumber += 1;
         return;
       }
       this.setPhase(Phase.DAY_PK);
@@ -763,23 +775,29 @@ export class JudgeEngine {
       state.votes.push(...pkVotes);
       pkVotes.forEach((v) => this.record.logVote(v));
       const pkTally = tallyVotes(pkVotes);
+      const pkOutcome = resolveTally(pkTally);
       state.voteCollecting = false;
       this.host.syncViews();
-      this.host.broadcast('vote:result', {
+      const pkResultPayload: VoteResultPayload = {
         tally: pkTally,
-        exiledSeat: null,
+        exiledSeat: pkOutcome.exiledSeat,
         isPK: true,
         details: pkVotes.map((v) => ({ voterSeat: v.voterSeat, targetSeat: v.targetSeat })),
-      });
-      const pkOutcome = resolveTally(pkTally);
+      };
+      this.lastVoteResultState = pkResultPayload;
+      this.host.broadcast('vote:result', pkResultPayload);
       if (pkOutcome.exiledSeat !== null) {
         await this.exileSeat(pkOutcome.exiledSeat, true);
         return;
       }
       this.say('再次平票，当日为平安日，无人出局。入夜。');
+      // 平安日与放逐对齐：天数同样递增，避免次日 NightRecord.dayNumber 与当天重复
+      state.dayNumber += 1;
       return;
     }
     this.say('无人得票（弃票），当日为平安日，无人出局。入夜。');
+    // 平安日与放逐对齐：天数同样递增，避免次日 NightRecord.dayNumber 与当天重复
+    state.dayNumber += 1;
   }
 
   /** 收集一轮投票（真人上行 / AI 决策；实时广播已投人数） */
@@ -841,7 +859,8 @@ export class JudgeEngine {
     this.say(`请 ${seat} 号留遗言。`);
     let content = '';
     if (player.isHuman) {
-      content = await this.waitForLastWords(seat);
+      // 带限时：玩家浏览器崩溃/断线时不再永久等待（防引擎死锁）
+      content = await this.waitForLastWordsWithTimeout(seat, appConfig.speech.lastWordsTimeLimitMs);
     } else {
       content = await this.aiWithTyping(seat, () =>
         this.ai.generateLastWords(player, this.host.buildView(player.id) as never),
@@ -945,6 +964,53 @@ export class JudgeEngine {
     return new Promise((resolve) => {
       this.lastWordsWaiter = { seat, resolve };
     });
+  }
+
+  /**
+   * 真人遗言等待 + 限时竞速（防死锁：玩家浏览器崩溃/断线时法官不再永久等待）。
+   * 超时返回空串、作废等待器（迟到的 submitLastWords 会被正确拒绝）并法官播报跳过。
+   * limitMs <= 0 表示不限时。
+   */
+  private waitForLastWordsWithTimeout(seat: number, limitMs: number): Promise<string> {
+    if (!limitMs || limitMs <= 0) {
+      return this.waitForLastWords(seat);
+    }
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (content: string): void => {
+        if (settled) return;
+        settled = true;
+        if (this.lastWordsTimeoutTimer) {
+          clearTimeout(this.lastWordsTimeoutTimer);
+          this.lastWordsTimeoutTimer = null;
+        }
+        resolve(content);
+      };
+      this.lastWordsTimeoutTimer = setTimeout(() => {
+        // 超时：作废当前遗言等待器，后续 submitLastWords 返回“当前没有待提交的遗言”
+        if (this.lastWordsWaiter && this.lastWordsWaiter.seat === seat) {
+          this.lastWordsWaiter = null;
+        }
+        this.say(`${seat} 号遗言超时，跳过。`);
+        finish('');
+      }, limitMs);
+      void this.waitForLastWords(seat).then((content) => finish(content));
+    });
+  }
+
+  /** 当前等待遗言的座位（null = 无）；视图恢复通道：刷新/重连后据此恢复遗言输入框 */
+  get pendingLastWordsSeat(): number | null {
+    return this.lastWordsWaiter?.seat ?? null;
+  }
+
+  /** 本轮投票实时进度（null = 非投票收集窗口）；视图恢复通道：刷新后恢复投票进度条 */
+  get currentVoteProgress(): { votedCount: number; totalVoters: number } | null {
+    return this.voteProgressState;
+  }
+
+  /** 最近一次已公示的投票结果（null = 本局尚无）；视图恢复通道：刷新后恢复票型明细 */
+  get lastVoteResult(): VoteResultPayload | null {
+    return this.lastVoteResultState;
   }
 
   /** AI 节奏：typing:start → 随机 1-3s 打字动效 → 生成 → typing:stop */

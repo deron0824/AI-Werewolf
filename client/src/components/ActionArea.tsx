@@ -57,6 +57,13 @@ export default function ActionArea(): JSX.Element {
         setListening(false);
         clearDraft();
       },
+      // 非致命通知（如 90s 上限到期）：stt 内部已自动停止并保留草稿，
+      // 此处复位按钮态即可，不清草稿
+      onNotice: (message) => {
+        dictationRef.current = null;
+        setListening(false);
+        showToast(message);
+      },
     });
     if (handle) {
       dictationRef.current = handle;
@@ -120,11 +127,14 @@ export default function ActionArea(): JSX.Element {
           value={composedText()}
           maxLength={MAX_LEN}
           onChange={(e) => {
-            // 手动打字：识别中时草稿并入输入值（下次识别回调只在草稿为空时追加，避免覆盖）
-            setContent(e.target.value);
-            if (listening && draftRef.current) {
+            // 手动打字与识别互斥：识别中先停识别，把当前草稿并入内容，避免草稿反复覆盖用户打字
+            if (listening) {
+              stopDictation();
+              const draft = draftRef.current;
               clearDraft();
+              setContent((prev) => (prev + draft).slice(0, MAX_LEN));
             }
+            setContent(e.target.value);
           }}
           className="w-full rounded bg-night-900/80 p-2 text-sm outline-none border border-white/10"
           rows={3}

@@ -108,6 +108,11 @@ export const config = {
      */
     timeLimitMs: numEnv('SPEECH_TIME_LIMIT_MS', 60_000),
     /**
+     * 真人遗言限时（防引擎死锁：玩家浏览器崩溃/断线时法官不再永久等待）。
+     * 【受 SPEED_MODE 倍率影响】——SPEED_MODE=0 时取 100ms 最小值，保证测试/e2e 不卡 60s。
+     */
+    lastWordsTimeLimitMs: speedMul(numEnv('LASTWORDS_TIME_LIMIT_MS', 60_000)),
+    /**
      * AI 发言展示节奏开关（迭代3 F1）。SPEED_MODE<=0（极速/e2e 模式）时关闭，
      * 服务端不为字幕展示等待，保证测试与极速演示不受影响。
      */

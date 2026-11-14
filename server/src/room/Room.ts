@@ -244,7 +244,15 @@ export class Room {
 
   // ============ 广播 / 私发 / 视图裁剪 ============
 
+  /** 法官播报环形缓冲（最近 30 条）：刷新/重连后经 judgeHistory 恢复播报流水 */
+  private judgeLog: string[] = [];
+
   broadcast(event: keyof ServerToClientEvents, payload: unknown): void {
+    // judge:say 进环形缓冲（视图恢复通道），再正常广播
+    if (event === 'judge:say' && payload && typeof payload === 'object' && 'text' in payload) {
+      this.judgeLog.push(String((payload as { text: unknown }).text));
+      this.judgeLog = this.judgeLog.slice(-30);
+    }
     // 通过对象属性访问调用 emit 保持 this 绑定；payload 结构由 shared/events 协议约束
     (this.io.to(roomChannel(this.roomId)) as unknown as { emit: (ev: string, p: unknown) => void }).emit(
       event,
@@ -344,6 +352,16 @@ export class Room {
       speechDeadlineMs: state.speechDeadlineMs ?? null,
       difficulty: state.difficulty,
     };
+    // 刷新/重连恢复通道：瞬态状态进视图（视图是唯一权威通道）
+    view.lastWordsSeat = this.engine.pendingLastWordsSeat;
+    view.judgeHistory = [...this.judgeLog];
+    if (state.phase === Phase.DAY_VOTE || state.phase === Phase.DAY_PK) {
+      view.voteProgressLive = this.engine.currentVoteProgress;
+    } else {
+      view.voteProgressLive = null;
+    }
+    // 最近一次已公示票型（刷新恢复：投票阶段刷新仍能看到上一轮结果）
+    view.lastVoteResult = this.engine.lastVoteResult;
     // 私密字段按角色注入
     if (self.role === Role.WEREWOLF) {
       view.wolfTeammates = state.players
@@ -367,6 +385,37 @@ export class Room {
       const lastNight = state.nights[state.nights.length - 1] ?? null;
       view.witchKnifeTarget =
         !saveUsed && lastNight && lastNight.dayNumber === state.dayNumber ? lastNight.knifeTargetSeat : null;
+    }
+    // privateInfo：按身份推导（刷新恢复用；非神职/狼人为 null）
+    if (self.role === Role.SEER) {
+      view.privateInfo = {
+        checkResults: state.nights
+          .filter((n) => n.seerCheckSeat !== null)
+          .map((n) => ({
+            dayNumber: n.dayNumber,
+            targetSeat: n.seerCheckSeat as number,
+            isWolf: n.seerCheckResult === 'WEREWOLF',
+          })),
+        wolfTeammates: [],
+        witchKnifeTarget: null,
+      };
+    } else if (self.role === Role.WEREWOLF) {
+      view.privateInfo = {
+        checkResults: [],
+        wolfTeammates: view.wolfTeammates ?? [],
+        witchKnifeTarget: null,
+      };
+    } else if (self.role === Role.WITCH) {
+      const saveUsed = state.nights.some((n) => n.witchSavedSeat !== null);
+      const lastNight = state.nights[state.nights.length - 1] ?? null;
+      view.privateInfo = {
+        checkResults: [],
+        wolfTeammates: [],
+        witchKnifeTarget:
+          !saveUsed && lastNight && lastNight.dayNumber === state.dayNumber ? lastNight.knifeTargetSeat : null,
+      };
+    } else {
+      view.privateInfo = null;
     }
     return view;
   }
@@ -471,6 +520,7 @@ export class Room {
   private resetGameState(): void {
     this.record.reset();
     this.continueVotes.clear();
+    this.judgeLog = [];
     this.state.dayNumber = 0;
     this.state.isNight = false;
     this.state.phase = Phase.LOBBY;

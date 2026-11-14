@@ -238,6 +238,34 @@ export interface GameStateView {
   speechDeadlineMs?: number | null;
   /** AI 难度（全员可见，仅房主在大厅可改） */
   difficulty?: AIDifficulty;
+  /**
+   * 刷新/重连恢复通道（瞬态状态进视图，视图是唯一权威通道）：
+   * 当前等待遗言的座位；null = 无。undefined = 旧协议（前端不据此覆盖）。
+   */
+  lastWordsSeat?: number | null;
+  /** 法官播报环形缓冲（最近 30 条），刷新后恢复播报流水 */
+  judgeHistory?: string[];
+  /** 投票窗口实时进度（仅投票阶段携带；非投票阶段缺省/null） */
+  voteProgressLive?: { votedCount: number; totalVoters: number } | null;
+  /**
+   * 按玩家身份推导的私密信息（刷新恢复用；非神职/狼人为 null）：
+   * checkResults 仅预言家、wolfTeammates 仅狼人、witchKnifeTarget 仅女巫。
+   */
+  privateInfo?: {
+    checkResults: { dayNumber: number; targetSeat: number; isWolf: boolean }[];
+    wolfTeammates: number[];
+    witchKnifeTarget: number | null;
+  } | null;
+  /**
+   * 最近一次投票结果公示（刷新恢复用；null = 本局尚无已公示的投票）。
+   * 结构与 events.VoteResultPayload 一致（types.ts 不反向引用 events，避免循环 import）。
+   */
+  lastVoteResult?: {
+    tally: { seat: number; count: number }[];
+    exiledSeat: number | null;
+    isPK: boolean;
+    details: { voterSeat: number; targetSeat: number }[];
+  } | null;
 }
 
 /** LLM 降级链状态（llm:status payload） */

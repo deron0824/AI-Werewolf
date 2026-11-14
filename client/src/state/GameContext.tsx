@@ -31,7 +31,8 @@ import { playSfx, initSfxUnlock } from '../speech/sfx';
 
 // ===== 身份持久化 =====
 
-const IDENTITY_KEY = 'werewolf-demo-identity';
+/** 本地身份凭证 localStorage 键（ErrorBoundary「回到大厅」清理同一键） */
+export const IDENTITY_KEY = 'werewolf-demo-identity';
 
 function loadIdentity(): RoomIdentity | null {
   try {
@@ -145,7 +146,39 @@ function reducer(state: GameState, action: GameAction): GameState {
     case 'view': {
       // 迭代2 F6 兜底：回到大厅且无胜者（重开后的 state:sync）也清掉旧局弹窗
       const backToLobby = action.view.phase === Phase.LOBBY && (action.view.winner ?? null) === null;
-      return { ...state, view: action.view, gameOver: backToLobby ? null : state.gameOver };
+      const next: GameState = { ...state, view: action.view, gameOver: backToLobby ? null : state.gameOver };
+      // 刷新/重连恢复通道：瞬态状态进视图（视图是唯一权威通道），state:sync 携带则据此恢复
+      if (action.view.lastWordsSeat !== undefined) {
+        next.lastWordsSeat = action.view.lastWordsSeat;
+      }
+      if (action.view.judgeHistory !== undefined) {
+        // 视图快照替换播报流水（此后 judge:say 仍实时追加）
+        next.judgeMessages = [...action.view.judgeHistory];
+      }
+      if (action.view.voteProgressLive != null) {
+        next.voteProgress = { ...action.view.voteProgressLive };
+      }
+      // voteProgressLive 为 null/缺省：不覆盖（投票结果态由 voteResult 分支管理）
+      if (action.view.lastVoteResult != null && state.voteResult === null) {
+        // 刷新恢复：本地尚无票型公示时用视图快照补上（本地有值时不覆盖）
+        next.voteResult = { ...action.view.lastVoteResult };
+      }
+      if (action.view.privateInfo) {
+        const info = action.view.privateInfo;
+        if (info.checkResults.length > 0) {
+          next.checkResults = info.checkResults.map((r) => ({
+            targetSeat: r.targetSeat,
+            result: r.isWolf ? ('WEREWOLF' as const) : ('GOOD' as const),
+          }));
+        }
+        if (info.wolfTeammates.length > 0) {
+          next.wolfTeammates = [...info.wolfTeammates];
+        }
+        if (info.witchKnifeTarget !== null) {
+          next.witchInfo = { knifeTargetSeat: info.witchKnifeTarget };
+        }
+      }
+      return next;
     }
     case 'llm':
       return { ...state, llmStatus: action.status };
