@@ -200,7 +200,7 @@ describe('F6 房间生命周期守卫（WAITING/RUNNING/FINISHED）', () => {
     const finishedState = room.getState();
     finishedState.winner = 'WEREWOLF';
     finishedState.winnerReason = '测试终局：狼人屠城获胜';
-    room.record.logSpeech({ seat: 3, name: 'AI3', avatarId: 'ai-3', content: '旧局发言内容', isAI: true });
+    room.record.logSpeech({ seat: 3, name: 'AI3', avatarId: 'ai-3', content: '旧局发言内容', isAI: true, dayNumber: 1 });
     room.onGameOver();
     expect(room.status).toBe('FINISHED');
     const oldRecord = room.exportRecord();

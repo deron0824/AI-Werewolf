@@ -37,30 +37,59 @@ function roleName(role: Role): string {
 function situationSummary(view: GameStateView): string {
   const alive = view.players.filter((p) => p.alive).map((p) => `${p.seat}号${p.name}${p.isHuman ? '(真人)' : '(AI)'}`);
   const dead = view.players.filter((p) => !p.alive).map((p) => `${p.seat}号`);
-  // 迭代5修正：完整发言史——本局所有轮次、所有玩家的发言全量纳入（按时间顺序，单条截断防超长），
+  // 迭代5修正：完整发言史——本局所有轮次、所有玩家的发言全量纳入（单条截断防超长），
   // 保证 AI 的推理基于全量历史（票型、表水、前后矛盾）而非仅最近几条；6 人局总长度可控。
-  const history = view.speeches.map((s) => `${s.seat}号：${sanitizeText(s.content, 120)}`).join('\n');
+  // 迭代8：发言史按天分组 + 每条带顺序序号——AI 必须知道"谁先说、谁后说、说了几轮"，
+  // 否则会出现"对已发言者说'听听他怎么说'"等顺序错乱。
+  const byDay = new Map<number, typeof view.speeches>();
+  for (const s of view.speeches) {
+    const day = s.dayNumber ?? 0;
+    const arr = byDay.get(day) ?? [];
+    arr.push(s);
+    byDay.set(day, arr);
+  }
   let text = `第 ${view.dayNumber} ${view.isNight ? '夜' : '天'}。\n`;
   text += `存活玩家：${alive.join('、') || '无'}\n`;
   text += `已出局：${dead.join('、') || '无'}\n`;
-  if (history.length > 0) {
-    text += `本局全部发言记录（按时间先后）：\n${history}\n`;
+  if (byDay.size > 0) {
+    const groups: string[] = [];
+    for (const day of [...byDay.keys()].sort((a, b) => a - b)) {
+      const entries = byDay.get(day)!;
+      const label = day === view.dayNumber ? `今天（第 ${day} 天）` : `第 ${day} 天`;
+      const lines = entries.map((s, i) => {
+        const tag = s.isLastWords ? '（遗言）' : s.isPK ? '（PK 发言）' : '';
+        return `第 ${i + 1} 个发言 ${s.seat}号${s.isAI ? '' : '(真人)'}${tag}：${sanitizeText(s.content, 120)}`;
+      });
+      groups.push(`${label}发言记录（按发言先后顺序）：\n${lines.join('\n')}`);
+    }
+    text += `本局全部发言记录（按天数与发言先后排序）：\n${groups.join('\n\n')}\n`;
   } else {
     // 迭代7：明确"尚无发言"，防止模型误以为存在更早的上下文（甚至脑补上一局）
     text += `本局发言记录：尚无（本局还没有任何人发言过，你听不到任何之前的发言）。\n`;
   }
-  // 迭代7 反幻觉护栏：列出尚未发言的存活玩家 + 禁止虚构他人发言。
-  // 实测问题：第一轮里先发言的 AI 会幻觉出"X号之前发言过激"（实际 X 还没说过话）。
-  const spokenSeats = new Set(view.speeches.map((s) => s.seat));
-  const notSpoken = view.players.filter((p) => p.alive && !spokenSeats.has(p.seat)).map((p) => `${p.seat}号`);
-  if (notSpoken.length > 0) {
-    text += `本局尚未发言过的玩家：${notSpoken.join('、')}（他们还没有说过任何话）。\n`;
+  // 迭代8 反顺序错乱护栏：以"今天的发言轮"为口径区分已发言/未发言（旧版按"本局"口径，
+  // 第二天起永远全部"已发言"，AI 无法知道今天谁还没说话）。
+  // 遗言不计入今天的发言轮（它是放逐/夜死后的遗言，不是白天发言）。
+  const todaySpeeches = view.speeches.filter((s) => (s.dayNumber ?? 0) === view.dayNumber && !s.isLastWords);
+  const spokenToday = new Set(todaySpeeches.map((s) => s.seat));
+  const spokenList = view.players.filter((p) => p.alive && spokenToday.has(p.seat)).map((p) => `${p.seat}号`);
+  const notSpoken = view.players.filter((p) => p.alive && !spokenToday.has(p.seat)).map((p) => `${p.seat}号`);
+  if (view.isNight) {
+    // 夜晚没有发言轮次，白天记录已在上面的分组里
+  } else if (spokenList.length > 0) {
+    text += `今天（第 ${view.dayNumber} 天）已经发完言的玩家：${spokenList.join('、')}。他们的话已经说完了——严禁再对他们说"听听你的发言/等你发言后再说"，你只能总结、回应或反驳他们已说过的内容（引用以"发言记录"为准）。\n`;
+    if (notSpoken.length > 0) {
+      text += `今天还没有发言的玩家：${notSpoken.join('、')}。对他们只能表达"期待其观点"，严禁编造他们已经说过什么。\n`;
+    } else {
+      text += `今天的发言已全部结束。\n`;
+    }
+  } else if (notSpoken.length > 0) {
+    text += `今天（第 ${view.dayNumber} 天）还没有任何人发言，尚未发言的玩家：${notSpoken.join('、')}（含你在内，大家都还没说过话）。\n`;
   }
   text += `引用规则：评论或转述他人发言时，只能引用上面"发言记录"中真实出现的内容；严禁编造、脑补或转述记录里不存在的发言（例如说某人"刚才说过什么"而记录里并没有）。\n`;
   // 迭代7 反幻觉护栏②：已出局玩家不能被当作在场目标（实测问题：AI 提议"投已出局的 1 号"）
-  const deadSeats = view.players.filter((p) => !p.alive).map((p) => `${p.seat}号`);
-  if (deadSeats.length > 0) {
-    text += `出局规则：${deadSeats.join('、')} 已经出局离场！他们不能再被投票、不能再被刀、不能作为任何行动或指责的目标。你可以引用死者生前发言作为推理线索，但你的发言分析与投票意向只能针对存活玩家（${alive.join('、') || '无'}）。\n`;
+  if (dead.length > 0) {
+    text += `出局规则：${dead.join('、')} 已经出局离场！他们不能再被投票、不能再被刀、不能作为任何行动或指责的目标。你可以引用死者生前发言作为推理线索，但你的发言分析与投票意向只能针对存活玩家（${alive.join('、') || '无'}）。\n`;
   }
   return text;
 }
@@ -128,6 +157,18 @@ function difficultyHint(view: GameStateView): string {
 /** 白天发言 prompt */
 export function buildSpeechPrompt(player: Player, view: GameStateView, scenario: string): LLMRequest {
   const role = player.role ?? Role.VILLAGER;
+  // 迭代8：发言位置顺序信息——AI 必须明确自己是今天第几个发言、紧邻上一位是谁，
+  // 否则会出现"无视前面发言/对已发言者表达等待"的顺序错乱。
+  const beforeMe = view.speeches.filter(
+    (s) => (s.dayNumber ?? 0) === view.dayNumber && !s.isLastWords && s.seat !== player.seat,
+  );
+  const lastSpeaker = beforeMe.length > 0 ? beforeMe[beforeMe.length - 1].seat : null;
+  const orderHint = [
+    `现在是白天发言环节，轮到你发言：你是今天第 ${beforeMe.length + 1} 个发言的玩家。`,
+    lastSpeaker !== null
+      ? `紧邻你之前发言的是 ${lastSpeaker} 号（其余在你之前发言的玩家见"已发完言"名单），你的发言应该自然承接前面的发言（可以回应、总结或反驳之前玩家的观点）。`
+      : `你是今天第一个发言的玩家，还没有任何发言可供回应。`,
+  ].join('\n');
   const roleHint: Record<Role, string> = {
     WEREWOLF: '你是狼人，白天必须伪装成好人：可以低调隐藏或悍跳预言家，绝不能暴露狼队友。',
     SEER: '你是预言家，天亮后应当报出你的查验结果引导好人。',
@@ -141,6 +182,7 @@ export function buildSpeechPrompt(player: Player, view: GameStateView, scenario:
       roleHint[role],
       secretInfo(view),
       situationSummary(view),
+      orderHint,
       scenario,
       // 迭代4 F1 + 迭代5 F2：长度放开为 15~160 字由 LLM 自定，但引导以简洁为主，
       // 缩短生成与字幕展示的等待时间（大部分发言 20~80 字即可说清）

@@ -597,6 +597,7 @@ export class JudgeEngine {
           content,
           isAI: player.isHuman === false,
           isLastWords: true,
+          dayNumber: state.dayNumber,
         };
         this.host.broadcast('speech:new', entry);
         this.record.logSpeech(entry);
@@ -657,6 +658,8 @@ export class JudgeEngine {
           avatarId: player.avatarId,
           content,
           isAI: player.isHuman === false,
+          dayNumber: state.dayNumber,
+          ...(isPK ? { isPK: true } : {}),
         };
         this.host.broadcast('speech:new', entry);
         this.record.logSpeech(entry);
@@ -874,6 +877,8 @@ export class JudgeEngine {
         content,
         isAI: player.isHuman === false,
         isLastWords: true,
+        dayNumber: state.dayNumber,
+        ...(isPK ? { isPK: true } : {}),
       };
       this.host.broadcast('speech:new', entry);
       this.record.logSpeech(entry);

@@ -114,6 +114,10 @@ export interface SpeechEntry {
   isAI: boolean;
   /** 是否遗言 */
   isLastWords?: boolean;
+  /** 发言所属天数（迭代8：供 AI prompt 区分轮次与发言顺序，也给前端分组用） */
+  dayNumber: number;
+  /** 是否 PK 环节的发言 */
+  isPK?: boolean;
 }
 
 /** 单条投票明细（服务端记录用，投票过程中不广播明细） */
