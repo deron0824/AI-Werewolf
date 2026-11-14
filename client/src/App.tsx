@@ -20,7 +20,9 @@ export default function App(): JSX.Element {
           mode: 'dark',
           primary: { main: '#7c6dd4' },
           secondary: { main: '#e0a44f' },
-          background: { default: 'transparent', paper: '#1f2a55' },
+          // 不能设 'transparent'：MUI SnackbarContent 会对 background.default 做 emphasize()
+          // 颜色运算，'transparent' 会抛 "MUI: Unsupported transparent color" 导致 toast 一弹即崩页。
+          background: { default: '#101728', paper: '#1f2a55' },
         },
         typography: {
           fontFamily: "'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif",

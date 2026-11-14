@@ -102,16 +102,17 @@ export const config = {
     /** 遗言最大长度 */
     lastWordsMaxLength: 200,
     /**
-     * 真人白天发言限时（迭代2 F4）。
+     * 真人白天发言限时（迭代2 F4；迭代8：60s→90s，手打长发言更从容）。
      * 注意：这是玩法时长不是演示节奏，【不受 SPEED_MODE 倍率影响】。
      * 0 = 不限时（法官无限等待）。
      */
-    timeLimitMs: numEnv('SPEECH_TIME_LIMIT_MS', 60_000),
+    timeLimitMs: numEnv('SPEECH_TIME_LIMIT_MS', 90_000),
     /**
      * 真人遗言限时（防引擎死锁：玩家浏览器崩溃/断线时法官不再永久等待）。
-     * 【受 SPEED_MODE 倍率影响】——SPEED_MODE=0 时取 100ms 最小值，保证测试/e2e 不卡 60s。
+     * 迭代8：默认 90s（与白天发言限时对齐，手打遗言不至于太紧）。
+     * 【受 SPEED_MODE 倍率影响】——SPEED_MODE=0 时取 100ms 最小值，保证测试/e2e 不卡 90s。
      */
-    lastWordsTimeLimitMs: speedMul(numEnv('LASTWORDS_TIME_LIMIT_MS', 60_000)),
+    lastWordsTimeLimitMs: speedMul(numEnv('LASTWORDS_TIME_LIMIT_MS', 90_000)),
     /**
      * AI 发言展示节奏开关（迭代3 F1）。SPEED_MODE<=0（极速/e2e 模式）时关闭，
      * 服务端不为字幕展示等待，保证测试与极速演示不受影响。
