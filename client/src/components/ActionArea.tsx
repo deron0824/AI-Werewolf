@@ -148,7 +148,7 @@ export default function ActionArea(): JSX.Element {
           {listening
             ? '🎙️ 识别中……说完点击「⏹ 结束识别」，字幕会放进输入框（可先预览再提交）'
             : sttSupported
-              ? '支持 🎤 语音输入：点一下说话，字幕自动打进输入框（首次需授权麦克风）'
+              ? '支持 🎤 语音输入：点一下说话，字幕自动打进输入框（首次需授权麦克风；Chrome 需谷歌网络，推荐 Edge 浏览器）'
               : ''}
         </div>
         <button

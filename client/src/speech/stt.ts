@@ -74,7 +74,8 @@ function errorText(code: string): string {
     case 'service-not-allowed':
       return '麦克风权限被拒绝，请在浏览器地址栏授权后重试';
     case 'network':
-      return '语音识别服务不可用（浏览器识别引擎需联网），请改用键盘输入';
+      // Chrome 的识别引擎依赖谷歌服务器（国内直连不通）；Edge 走微软引擎国内可用
+      return '语音识别服务不可用（Chrome 识别引擎需连谷歌服务，国内网络无法直连）——请改用 Edge 浏览器打开本页再开麦，或直接键盘输入';
     case 'audio-capture':
       return '未检测到麦克风设备，请改用键盘输入';
     case 'aborted':

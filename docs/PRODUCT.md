@@ -90,7 +90,7 @@
 | 身份牌 | `client/src/components/RoleCard.tsx` | 只读 | — | 视图按角色裁剪：狼→wolfTeammates；预言家→checkRecords；女巫→potions+witchKnifeTarget（Room.buildView 347-370） | 仅本人可见；开局前显示「身份牌将在开局后发放」 |
 | 夜间行动面板 | `client/src/components/NightPanel.tsx` | 狼：点座位刀/空刀；预言家：点座位验；女巫：救/选毒目标/不用药 | socket `action:night` | phaseAllowsAction 阶段-角色权限校验 + actionGate 收集窗口校验（JudgeEngine.submitAction 163-179）；女巫边界 witchConstraints 校验，非法降级 skip | 无权限角色显示「🌙 请闭眼」遮罩（防私密信息串屏）；死人/已提交者被拒 |
 | 发言输入框（键盘+🎤） | `client/src/components/ActionArea.tsx` | 输入 ≤300 字或点 🎤 语音听写，确认后提交 | socket `speech:submit` / `lastwords:submit` | 空文本拒、>300 字拒（JudgeEngine.submitSpeech 182-197）；遗言仅认 lastWordsWaiter 当前座位（227-238） | 仅 isMySpeechTurn=true（DAY_SPEECH/DAY_PK 且 currentSpeakerSeat=我且存活）显示发言框；遗言框由法官播报解析触发（GameContext lastWordsSeat） |
-| 🎤 麦克风语音输入 | `client/src/speech/stt.ts` + `ActionArea.tsx:43-67` | 点🎤开始/⏹结束，识别草稿并入输入框 | 无（纯前端，随发言提交） | — | 仅 Chromium + 安全上下文（localhost/HTTPS）显示按钮（getSttSupport）；权限拒绝/网络不可用/无设备→中文 toast 回退键盘 |
+| 🎤 麦克风语音输入 | `client/src/speech/stt.ts` + `ActionArea.tsx:43-67` | 点🎤开始/⏹结束，识别草稿并入输入框 | 无（纯前端，随发言提交） | — | 仅 Chromium + 安全上下文（localhost/HTTPS）显示按钮（getSttSupport）；权限拒绝/网络不可用/无设备→中文 toast 回退键盘。⚠️ 引擎依赖：Chrome 识别走谷歌服务（国内直连不通，必报 network）；**推荐 Edge**（微软引擎国内可用） |
 | 发言流式字幕 | `client/src/components/SpeechFeed.tsx`（TypewriterText） | 只读 | 服务端节奏（8 字/秒） | 服务端 paceSpeechDisplay 等待等长时长再过轮 | AI 发言打字机流式；真人发言即时全显；确定性队列保证一次只有一条在打字（迭代5 F-顺序修复） |
 | 投票面板 | `client/src/components/VotePanel.tsx` | 点选候选头像→提交 | socket `vote:submit` | 死者拒投、目标须在候选内、禁自投（JudgeEngine.submitVote 200-224）；已投者重复提交拒 | 有权=存活且窗口开启（DAY_PK 时非平票者）；无权显示等待态/「你已出局」；无弃票按钮（见 §7 Y3） |
 | 票型公示 | `VotePanel.tsx:30-60` + `SpeechFeed.tsx:172-186` | 只读 | 服务端广播 `vote:result`（含 details 谁投给谁） | 投票结束才广播；结算后随视图 voteHistory 永久可查 | 收集窗口关闭后才展示明细；弃票真人不在 details |
@@ -115,7 +115,7 @@
 | 投票/夜间行动超时 | 无超时（humanActionTimeoutMs=0 无限等待） | 单个真人挂机 → 全房卡死在该阶段；投票面板无弃票按钮无法主动放行（Y3/Y4） |
 | 玩家被放逐后 | 席位置灰、仍收全部广播（观战）；可留遗言（lastWordsSeat 命中自己）；投票阶段显示「你已出局，可旁观投票进程」 | 无 |
 | AI LLM 服务降级（A→B→C） | A 失败→熔断 60s 直接走 B；B 未配置/失败→C 模板句；C 永不失败；状态灯实时展示；决策解析失败回规则化兜底，发言回模板句 | 状态灯只在变化时广播，刷新端靠新连接推送补齐 |
-| 麦克风权限拒绝/识别服务不可用/识别中断 | not-allowed→toast「请在地址栏授权」；network→「识别服务不可用，改用键盘」；audio-capture→「未检测到麦克风」；no-speech 静默等待；静默断开自动续起（onend→start） | 自动续起后已确认终稿丢失（P0-3）+ 无限续起无防护；见 §6 |
+| 麦克风权限拒绝/识别服务不可用/识别中断 | not-allowed→toast「请在地址栏授权」；network→「Chrome 识别引擎需连谷歌服务国内不通，改用 Edge 或键盘」（迭代8 细化）；audio-capture→「未检测到麦克风」；no-speech 静默等待；静默断开自动续起（onend→start） | 自动续起后已确认终稿丢失（P0-3）+ 无限续起无防护；见 §6 |
 | 房间内单人开局 | 房主单人可开局，fillAI 自动补满 5 个 AI（花名册优先未上场头像，不足循环复用）；1 号真人 + 5 AI 正常进行 | 无 |
 | 游戏结束双人不同时点继续 | 先点者见「1/2 已确认（等待对方）」；对方后点→两人同时收到 game:restart 清空进入新局 | 一人掉线/退出后另一人永远停在结算画面（无单方强制重开/超时通道）；Y5 |
 | AI 掉线 | AI 无连接概念，决策全在服务端，不受任何网络影响 | 无 |
