@@ -41,7 +41,8 @@
 | 天亮播报 | 平安夜：「昨夜是平安夜，无人死亡」；有死：「昨夜死亡的是 X 号、Y 号」（双死一起报，不区分刀/毒） | `JudgeEngine.runDawnAndDay`（535-549）；UNCLEAR #5 |
 | 首夜遗言 | 仅 dayNumber===1 且有死时，按死者座位顺序收遗言 | `JudgeEngine.ts:552-559`（firstNightLastWordsOnly） |
 | 白天发言起始位 | 有死者：从「最大死者座位」的下一位存活者开始环形发言；平安夜：从最小存活座位开始 | `rules.ts:136-144`（speechStartSeat）+ `rules.ts:66-88`（speechOrder 环形） |
-| 发言限时 | 真人 60s（SPEECH_TIME_LIMIT_MS，玩法时长不受 SPEED_MODE 影响）；超时法官播报「X 号思考超时，跳过发言」并视为「过」；AI 发言按 8 字/秒字幕节奏推进（上限 60s） | `server/src/config.ts:109/118/123`；`JudgeEngine.waitForSpeechWithTimeout`（918-942）；`paceSpeechDisplay`（969-976） |
+| 发言限时 | 真人 90s（SPEECH_TIME_LIMIT_MS，玩法时长不受 SPEED_MODE 影响；迭代8 由 60s 放宽，手打长发言更从容）；超时法官播报「X 号思考超时，跳过发言」并视为「过」；AI 发言按 8 字/秒字幕节奏推进（上限 60s） | `server/src/config.ts:109/118/123`；`JudgeEngine.waitForSpeechWithTimeout`（918-942）；`paceSpeechDisplay`（969-976） |
+| AI 发言上下文（迭代8 顺序修复） | 发言史按天分组、每条带「第 N 个发言」序号与（真人/遗言/PK）标注；prompt 显式给出今天的「已发完言名单」（严禁再说"听听他怎么说"）与「尚未发言名单」（严禁替其编造发言，只能表达期待）；发言 prompt 另声明「你是今天第 N 个发言 + 紧邻上一位是谁」。遗言不计入当天发言轮。SpeechEntry 新增 dayNumber/isPK 字段 | `server/src/ai/promptBuilder.ts`（situationSummary/buildSpeechPrompt）；`JudgeEngine` 三处 entry 构造（594-601/654-662/870-879）；单测 `tests/speech-order-prompt.test.ts` |
 | 投票 | 全体存活者投票；候选=全部存活座位；禁自投（服务端拒绝）；实时广播已投人数（不显示谁投谁）；投票结束广播完整票型明细 | `JudgeEngine.runVoteFlow/collectVotes`（716-829）；`JudgeEngine.submitVote`（200-224） |
 | 计票与放逐 | 最高票唯一→放逐；多人同最高票→PK | `rules.ts:105-117`（resolveTally）；`tallyVotes`（91-99） |
 | PK 流程 | 平票者 PK 发言 → 其余玩家（非平票者）在平票者中再投 → 出最高票放逐 → 再平票则平安日无人出局 | `JudgeEngine.ts:746-781`（pkOnTie=true） |
@@ -52,10 +53,10 @@
 
 | 环节 | 超时参数 | 超时行为 | 代码出处 |
 | --- | --- | --- | --- |
-| 真人发言 | 60s（speech.timeLimitMs） | 自动视为「过」，法官播报后流程继续 | `JudgeEngine.ts:918-942` |
+| 真人发言 | 90s（speech.timeLimitMs，迭代8 由 60s 放宽） | 自动视为「过」，法官播报后流程继续 | `JudgeEngine.ts:918-942` |
 | 真人夜间行动 | humanActionTimeoutMs 默认 **0=无限等待** | 无超时，玩家不行动则全房卡在该夜 | `config.ts:127`（UNCLEAR #2）；`collectNightActions`（456-467） |
 | 真人投票 | 同上（复用 humanActionTimeoutMs）默认无限等待；且投票面板**无弃票按钮**，必须点选才能推进 | 一名真人不投票 → 全场卡 DAY_VOTE | `collectVotes`（786-797）；`VotePanel.tsx`（无弃票入口） |
-| 真人遗言 | **无任何超时**（waitForLastWords 纯 Promise） | 已定位 P0-1，见 §6 | `JudgeEngine.waitForLastWords`（944-948） |
+| 真人遗言 | 90s（lastWordsTimeLimitMs，迭代8 由 60s 放宽；受 SPEED_MODE 倍率影响） | 超时播报「X 号遗言超时，跳过」，迟到提交被拒 | `JudgeEngine.waitForLastWordsWithTimeout`；P0-1 已修复，见 §6 |
 | AI 全部环节 | LLM 调用统一 10s 超时 + A 路熔断 60s + 模板句兜底 | 永不阻塞流程 | `config.ts:70/83`；`LLMPipeline.chat`（LLMPipeline.ts:85-106） |
 
 ## 3. 阶段状态机表
@@ -69,7 +70,7 @@
 | NIGHT_SEER | 狼环节结束 | 存活预言家：验一人（无限等待） | 验毕私发 check:result | 预言家：验人面板+已验记录；他人：闭眼遮罩 |
 | NIGHT_WITCH | 预言家环节结束 | 存活女巫：救/毒/skip 三选一（无限等待）；非法动作服务端降级为 skip | 收到一个动作即结算 | 女巫：刀口提示（解药未用时）+双药按钮；他人：闭眼遮罩 |
 | DAWN | 夜结算完成 | 无操作（纯播报） | 播报+死讯广播后即时进入遗言/发言 | 法官播报死讯/平安夜；死亡座位置灰 |
-| DAY_SPEECH | DAWN 及首夜遗言后 | 当前发言者：输入发言（≤300 字，真人 60s）；AI 自动生成 | 全员轮完 → DAY_VOTE；个人超时=自动「过」 | 发言侧栏流式字幕；轮到本人时输入框+倒计时条 |
+| DAY_SPEECH | DAWN 及首夜遗言后 | 当前发言者：输入发言（≤300 字，真人 90s）；AI 自动生成 | 全员轮完 → DAY_VOTE；个人超时=自动「过」 | 发言侧栏流式字幕；轮到本人时输入框+倒计时条 |
 | DAY_VOTE | 发言结束 | 存活者：投一名存活者（禁自投）；无超时默认无限等待 | 全员投完 → 公示票型 | 投票面板（点选头像+提交）或无权等待态；实时已投人数 |
 | DAY_PK | 普通轮平票 | 平票者：PK 发言；其余存活者：在平票者中再投（平票者本人无投票权 selfCanVote=false） | 再投出结果或再平票（平安日） | PK 投票面板/「你是被投对象」等待态 |
 | DAY_EXILE | **枚举中存在但引擎从未进入**（放逐在 DAY_VOTE/DAY_PK 内同步完成） | — | — | StatusBar 有此文案但实际不会出现（见 §7 疑点 Y1） |
@@ -111,7 +112,7 @@
 | --- | --- | --- |
 | 玩家刷新页面 | localStorage 身份自动重连（rejoinToken）；state:sync 恢复：阶段/座位/存活/发言全文/投票候选/发言轮次/查验史/药水状态/狼队友/票型历史/继续确认进度 | 瞬态丢失：法官播报、死讯流水、实时投票进度、最后一轮票型公示、待遗言提示、AI 打字动效全部不恢复（P0-2）；见 §6 |
 | 玩家掉线重连 | socket.io 自动重连 + rejoinToken 重绑（Room.bindSocket）；席位永久保留（不做离场判定，Room.ts:223）；同一浏览器多标签兼容（sockets Map） | 掉线期间错过的 judge:say/check:result 等一次性事件不补发（私密事件只有 wolfTeammates/checkRecords/witchKnifeTarget 随视图可恢复） |
-| 发言超时 | 服务端 60s 判定，播报「思考超时，跳过发言」自动过轮；迟到提交被拒（speechWaiter 已作废） | 前端倒计时仅展示、归零不自动提交（SpeechCountdown 设计约定） |
+| 发言超时 | 服务端 90s 判定（迭代8 由 60s 放宽），播报「思考超时，跳过发言」自动过轮；迟到提交被拒（speechWaiter 已作废） | 前端倒计时仅展示、归零不自动提交（SpeechCountdown 设计约定） |
 | 投票/夜间行动超时 | 无超时（humanActionTimeoutMs=0 无限等待） | 单个真人挂机 → 全房卡死在该阶段；投票面板无弃票按钮无法主动放行（Y3/Y4） |
 | 玩家被放逐后 | 席位置灰、仍收全部广播（观战）；可留遗言（lastWordsSeat 命中自己）；投票阶段显示「你已出局，可旁观投票进程」 | 无 |
 | AI LLM 服务降级（A→B→C） | A 失败→熔断 60s 直接走 B；B 未配置/失败→C 模板句；C 永不失败；状态灯实时展示；决策解析失败回规则化兜底，发言回模板句 | 状态灯只在变化时广播，刷新端靠新连接推送补齐 |
